@@ -68,6 +68,13 @@ struct AgentWalletCreateResponse: Codable {
     let messageToSign: String
     let expiresAt: Date
     let nonce: String
+    let authToken: String?
+    let clientToken: String?
+    let token: String?
+
+    var resolvedAuthToken: String? {
+        authToken ?? clientToken ?? token
+    }
 }
 
 struct AgentWalletApproveRequest: Codable {
@@ -80,12 +87,26 @@ struct AgentWalletApproveResponse: Codable {
     let success: Bool
     let agentWallet: AgentWallet?
     let message: String?
+    let authToken: String?
+    let clientToken: String?
+    let token: String?
+
+    var resolvedAuthToken: String? {
+        authToken ?? clientToken ?? token
+    }
 }
 
 struct AgentWalletStatusResponse: Codable {
     let agentWallet: AgentWallet?
     let isActive: Bool
     let message: String?
+    let authToken: String?
+    let clientToken: String?
+    let token: String?
+
+    var resolvedAuthToken: String? {
+        authToken ?? clientToken ?? token
+    }
 }
 
 // MARK: - Builder Fee Approval

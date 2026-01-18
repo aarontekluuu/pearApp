@@ -155,6 +155,11 @@ final class WalletRepository: ObservableObject {
     private let apiService = PearAPIService.shared
     private let walletService = WalletService.shared
     private let keychainService = KeychainService.shared
+
+    private func updateAuthTokenIfPresent(_ token: String?) {
+        guard let token, !token.isEmpty else { return }
+        AuthService.shared.updateAuthToken(token)
+    }
     
     private init() {
         loadStoredState()
@@ -189,6 +194,7 @@ final class WalletRepository: ObservableObject {
         
         let request = AgentWalletCreateRequest(userWalletAddress: userAddress)
         let response = try await apiService.createAgentWallet(request: request)
+        updateAuthTokenIfPresent(response.resolvedAuthToken)
         
         return response
     }
@@ -210,6 +216,7 @@ final class WalletRepository: ObservableObject {
         )
         
         let response = try await apiService.approveAgentWallet(request: request)
+        updateAuthTokenIfPresent(response.resolvedAuthToken)
         
         if response.success, let wallet = response.agentWallet {
             agentWallet = wallet
@@ -225,6 +232,7 @@ final class WalletRepository: ObservableObject {
         
         do {
             let response = try await apiService.getAgentWalletStatus(userAddress: userAddress)
+            updateAuthTokenIfPresent(response.resolvedAuthToken)
             if let wallet = response.agentWallet {
                 agentWallet = wallet
                 keychainService.agentWalletAddress = wallet.address

@@ -20,6 +20,10 @@ final class AppState: ObservableObject {
     @Published var isWalletConnected: Bool = false
     @Published var isAgentApproved: Bool = false
     @Published var isBuilderApproved: Bool = false
+
+    init() {
+        AuthService.shared.bootstrap()
+    }
     
     var isFullyOnboarded: Bool {
         isWalletConnected && isAgentApproved && isBuilderApproved

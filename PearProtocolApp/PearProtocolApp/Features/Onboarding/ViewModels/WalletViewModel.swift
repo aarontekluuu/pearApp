@@ -167,6 +167,7 @@ final class WalletViewModel: ObservableObject {
     func disconnect() async {
         await walletService.disconnect()
         keychainService.clearAll()
+        AuthService.shared.clearAuthToken()
         currentStep = .welcome
     }
     

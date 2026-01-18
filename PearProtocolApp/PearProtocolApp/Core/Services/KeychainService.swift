@@ -140,3 +140,35 @@ struct StoredDataStatus {
         agentWalletDaysRemaining < Constants.AgentWallet.refreshThresholdDays
     }
 }
+
+// MARK: - Auth Service
+@MainActor
+final class AuthService: ObservableObject {
+    static let shared = AuthService()
+
+    private init() {}
+
+    func bootstrap() {
+        let token = KeychainService.shared.authToken ?? ConfigLoader.loadAPIToken()
+        applyToken(token)
+    }
+
+    func updateAuthToken(_ token: String?) {
+        if let token, !token.isEmpty {
+            KeychainService.shared.authToken = token
+            applyToken(token)
+        } else {
+            KeychainService.shared.authToken = nil
+            applyToken(nil)
+        }
+    }
+
+    func clearAuthToken() {
+        updateAuthToken(nil)
+    }
+
+    private func applyToken(_ token: String?) {
+        Task { await PearAPIService.shared.setAuthToken(token) }
+        WebSocketService.shared.setAuthToken(token)
+    }
+}

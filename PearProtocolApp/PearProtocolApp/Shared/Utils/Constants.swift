@@ -78,6 +78,7 @@ enum Constants {
 // MARK: - Config Loader
 enum ConfigLoader {
     static func loadAPIToken() -> String? {
+        #if DEBUG
         guard let path = Bundle.main.path(forResource: "Config", ofType: "plist"),
               let config = NSDictionary(contentsOfFile: path),
               let token = config["API_TOKEN"] as? String,
@@ -85,6 +86,9 @@ enum ConfigLoader {
             return nil
         }
         return token
+        #else
+        return nil
+        #endif
     }
     
     static func loadWalletConnectProjectId() -> String? {

@@ -25,6 +25,7 @@ final class WebSocketService: ObservableObject {
     private var reconnectDelay: TimeInterval = 1.0
     private var pingTimer: Timer?
     private var subscribedChannels: Set<String> = []
+    private var authToken: String?
     
     enum ConnectionState {
         case disconnected
@@ -34,6 +35,14 @@ final class WebSocketService: ObservableObject {
     }
     
     private init() {}
+
+    func setAuthToken(_ token: String?) {
+        if let token, !token.isEmpty {
+            authToken = token
+        } else {
+            authToken = nil
+        }
+    }
     
     // MARK: - Connection
     func connect() {
@@ -45,7 +54,7 @@ final class WebSocketService: ObservableObject {
         request.timeoutInterval = 10
         
         // Add auth token if available
-        if let token = ConfigLoader.loadAPIToken() {
+        if let token = authToken {
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         

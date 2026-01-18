@@ -18,14 +18,17 @@ actor PearAPIService {
         configuration.timeoutIntervalForResource = Constants.API.resourceTimeout
         
         self.session = Session(configuration: configuration)
-        
-        // Load token from config
-        self.authToken = ConfigLoader.loadAPIToken()
+
+        self.authToken = nil
     }
     
     // MARK: - Configuration
-    func setAuthToken(_ token: String) {
-        self.authToken = token
+    func setAuthToken(_ token: String?) {
+        if let token, !token.isEmpty {
+            self.authToken = token
+        } else {
+            self.authToken = nil
+        }
     }
     
     // MARK: - Headers
