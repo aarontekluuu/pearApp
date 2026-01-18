@@ -1,6 +1,6 @@
 # Pear Protocol iOS App
 
-A mobile-first iOS app that makes advanced pair/basket trading on Pear Protocol accessible to crypto-native traders through a simple, gambling-style UX.
+A mobile-first iOS app that makes advanced pair/basket trading on Pear Protocol accessible to crypto-native traders through a simple UX.
 
 ## Features
 
