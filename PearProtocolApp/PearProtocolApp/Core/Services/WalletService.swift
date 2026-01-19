@@ -144,7 +144,7 @@ final class WalletService: ObservableObject {
             // Listen for session proposal rejections (this helps debug if proposal was received but rejected)
             Sign.instance.sessionRejectionPublisher
                 .receive(on: DispatchQueue.main)
-                .sink { [weak self] (proposal, reason) in
+                .sink { (proposal, reason) in
                     print("🔵 [DEBUG] ❌ Session proposal REJECTED!")
                     print("🔵 [DEBUG] Proposal ID: \(proposal.id)")
                     print("🔵 [DEBUG] Reason: \(reason.message)")
@@ -300,55 +300,75 @@ final class WalletService: ObservableObject {
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
             print("🔵 [DEBUG] ✅ SDK initialization complete")
             
-            // TWO-STEP APPROACH FOR METAMASK iOS FIX:
-            // MetaMask iOS doesn't automatically query the relay for pending session proposals
-            // after establishing a pairing. The solution is to:
-            // 1. Create pairing URI first (without session proposal)
-            // 2. Open wallet and wait for pairing to be established
-            // 3. THEN create session proposal (which will be sent through the established pairing)
+            // REVERSED FLOW FIX: Create session proposal FIRST (combined URI)
+            // The two-step flow was causing pairing mismatch - Sign.instance.connect() creates a new pairing
+            // instead of using the established one. Solution: Create the session proposal FIRST,
+            // which gives us a combined URI that includes both pairing AND session proposal.
+            // This ensures the wallet receives everything in one URI, avoiding pairing mismatches.
             print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] TWO-STEP FLOW: Pairing First, Then Session Proposal")
+            print("🔵 [DEBUG] REVERSED FLOW: Session Proposal First (Combined URI)")
             print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] This fixes MetaMask iOS not showing approval popup")
-            print("🔵 [DEBUG] Step 1: Create pairing URI only")
-            print("🔵 [DEBUG] Step 2: Open wallet and wait for pairing")
-            print("🔵 [DEBUG] Step 3: Create session proposal after pairing confirmed")
+            print("🔵 [DEBUG] This fixes the pairing mismatch issue")
+            print("🔵 [DEBUG] Step 1: Create session proposal (includes pairing + proposal)")
+            print("🔵 [DEBUG] Step 2: Open wallet with combined URI")
+            print("🔵 [DEBUG] Step 3: Wait for session settlement")
             print("🔵 [DEBUG] ========================================")
             
-            // STEP 1: Create pairing URI (without session proposal)
-            connectionStage = .creatingPairing
-            print("🔵 [DEBUG] STEP 1: Creating pairing URI...")
-            let pairingURI: WalletConnectURI
+            // STEP 1: Create session proposal FIRST (this creates a combined URI)
+            connectionStage = .proposingSession
+            print("🔵 [DEBUG] STEP 1: Creating session proposal (combined URI)...")
+            
+            let requiredNamespaces = buildRequiredNamespaces()
+            print("🔵 [DEBUG] Required namespaces: \(requiredNamespaces)")
+            
+            let combinedURI: WalletConnectURI
             do {
-                pairingURI = try await Pair.instance.create()
-                print("🔵 [DEBUG] ✅ Pairing URI created: \(pairingURI.absoluteString)")
-                print("🔵 [DEBUG] Pairing topic: \(pairingURI.topic)")
-                print("🔵 [DEBUG] This URI contains ONLY pairing info (no session proposal yet)")
+                // Sign.instance.connect() creates a combined URI with both pairing and session proposal
+                // This is the standard WalletConnect v2 flow and should work with all wallets
+                combinedURI = try await Sign.instance.connect(requiredNamespaces: requiredNamespaces)
+                print("🔵 [DEBUG] ✅ Combined URI created: \(combinedURI.absoluteString.prefix(100))...")
+                print("🔵 [DEBUG] URI topic: \(combinedURI.topic.prefix(16))...")
+                print("🔵 [DEBUG] This URI contains BOTH pairing info AND session proposal")
+                print("🔵 [DEBUG] The wallet will receive everything in one go")
             } catch {
-                print("🔵 [DEBUG] ❌ Failed to create pairing URI: \(error)")
-                throw WalletError.connectionFailed("Failed to create pairing URI: \(error.localizedDescription)")
+                print("🔵 [DEBUG] ❌ Failed to create session proposal: \(error)")
+                throw WalletError.connectionFailed("Failed to create session proposal: \(error.localizedDescription)")
             }
             
-            let uriString = pairingURI.absoluteString
+            let uriString = combinedURI.absoluteString
             currentPairingURI = uriString
             
-            // STEP 2: Open wallet with pairing URI
+            // Log pairing info for debugging
+            let pairingsAfterProposal = Pair.instance.getPairings()
+            let activePairings = pairingsAfterProposal.filter { $0.expiryDate > Date() }
+            print("🔵 [DEBUG] Active pairings after proposal creation: \(activePairings.count)")
+            if let pairing = activePairings.first {
+                print("🔵 [DEBUG] Pairing topic: \(pairing.topic.prefix(16))...")
+                print("🔵 [DEBUG] Pairing expiry: \(pairing.expiryDate)")
+            }
+            
+            // STEP 2: Open wallet with combined URI
             connectionStage = .openingWallet
             print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] STEP 2: Opening wallet with pairing URI")
+            print("🔵 [DEBUG] STEP 2: Opening wallet with combined URI")
             print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] Pairing URI: \(uriString)")
+            print("🔵 [DEBUG] Combined URI: \(uriString.prefix(100))...")
             print("🔵 [DEBUG] Wallet should:")
             print("🔵 [DEBUG] 1. Parse the WalletConnect URI")
             print("🔵 [DEBUG] 2. Connect to relay using pairing info")
-            print("🔵 [DEBUG] 3. Establish pairing connection")
+            print("🔵 [DEBUG] 3. Receive the session proposal immediately")
+            print("🔵 [DEBUG] 4. Show the approval UI")
+            print("🔵 [DEBUG] ========================================")
             
             let walletOpened: Bool
             if let walletType = walletType {
-                walletOpened = await openWalletAppWithSimpleEncoding(walletType: walletType, uri: pairingURI)
+                walletOpened = await openWalletAppWithSimpleEncoding(walletType: walletType, uri: combinedURI)
             } else {
-                let simpleEncoded = uriString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uriString
-                walletOpened = await openWalletApp(with: simpleEncoded)
+                // Use proper encoding for query parameter values (RFC 3986 unreserved characters only)
+                var allowedCharacters = CharacterSet.alphanumerics
+                allowedCharacters.insert(charactersIn: "-._~")
+                let properlyEncoded = uriString.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? uriString
+                walletOpened = await openWalletApp(with: properlyEncoded)
             }
             
             if !walletOpened {
@@ -357,122 +377,43 @@ final class WalletService: ObservableObject {
                 throw WalletError.walletNotFound
             }
             
-            print("🔵 [DEBUG] ✅ Wallet opened")
+            print("🔵 [DEBUG] ✅ Wallet opened with combined URI")
             
-            // STEP 3: Wait for pairing to be established
-            connectionStage = .establishingPairing
+            // Give wallet a moment to process the URI and connect to relay
             print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] STEP 3: Waiting for pairing establishment")
+            print("🔵 [DEBUG] Giving wallet time to process URI and connect to relay...")
+            print("🔵 [DEBUG] The wallet should now:")
+            print("🔵 [DEBUG] 1. Connect to relay using pairing info from URI")
+            print("🔵 [DEBUG] 2. Receive the session proposal")
+            print("🔵 [DEBUG] 3. Show the approval UI")
             print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] ⏳ Waiting for wallet to connect to relay and establish pairing...")
-            print("🔵 [DEBUG] This is CRITICAL - we must wait for pairing before creating session proposal")
-            print("🔵 [DEBUG] MetaMask iOS needs the pairing to be fully established")
-            print("🔵 [DEBUG] before it can receive the session proposal")
-            print("🔵 [DEBUG] ========================================")
-            
-            let establishedPairingTopic: String
-            do {
-                establishedPairingTopic = try await waitForPairingEstablishment(
-                    expectedTopic: pairingURI.topic,
-                    timeout: 30.0
-                )
-                print("🔵 [DEBUG] ✅ Pairing established! Topic: \(establishedPairingTopic.prefix(16))...")
-            } catch {
-                print("🔵 [DEBUG] ❌ Pairing timeout: \(error)")
-                connectionStage = .failed("Pairing timeout - wallet may not have connected to relay")
-                throw WalletError.pairingTimeout
-            }
-            
-            // STEP 4: Create session proposal AFTER pairing is established
-            // CRITICAL FIX: MetaMask iOS doesn't query relay for pending proposals
-            // Solution: Create session proposal AFTER pairing is fully established
-            // This ensures MetaMask is connected to relay and can receive the proposal
-            connectionStage = .proposingSession
-            print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] STEP 4: Creating session proposal")
-            print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] Pairing is established (topic: \(establishedPairingTopic.prefix(16))...)")
-            print("🔵 [DEBUG] Now creating session proposal...")
-            print("🔵 [DEBUG] The proposal will be sent through the established pairing")
-            print("🔵 [DEBUG] MetaMask should now receive and display it")
-            print("🔵 [DEBUG] ========================================")
-            
-            let requiredNamespaces = buildRequiredNamespaces()
-            print("🔵 [DEBUG] Required namespaces: \(requiredNamespaces)")
-            
-            // CRITICAL: Verify we still have the pairing before creating proposal
-            let pairingsBeforeProposal = Pair.instance.getPairings()
-            let activePairings = pairingsBeforeProposal.filter { $0.expiryDate > Date() }
-            print("🔵 [DEBUG] Active pairings before proposal: \(activePairings.count)")
-            if let matchingPairing = activePairings.first(where: { $0.topic == establishedPairingTopic }) {
-                print("🔵 [DEBUG] ✅ Confirmed: Our pairing is still active")
-            } else {
-                print("🔵 [DEBUG] ⚠️ WARNING: Our pairing not found, but continuing anyway")
-            }
-            
-            // Create session proposal - WalletConnect SDK should use existing pairing
-            // Note: Sign.instance.connect() creates both pairing and proposal,
-            // but since we already have a pairing, it should reuse it
-            do {
-                let sessionProposalURI = try await Sign.instance.connect(requiredNamespaces: requiredNamespaces)
-                print("🔵 [DEBUG] ✅ Session proposal created")
-                print("🔵 [DEBUG] Proposal URI: \(sessionProposalURI.absoluteString.prefix(100))...")
-                print("🔵 [DEBUG] Proposal topic: \(sessionProposalURI.topic.prefix(16))...")
-                print("🔵 [DEBUG] Established pairing topic: \(establishedPairingTopic.prefix(16))...")
-                
-                // Check if new pairing was created or existing one used
-                let pairingsAfterProposal = Pair.instance.getPairings()
-                let activePairingsAfter = pairingsAfterProposal.filter { $0.expiryDate > Date() }
-                print("🔵 [DEBUG] Active pairings after proposal: \(activePairingsAfter.count)")
-                
-                if activePairingsAfter.count > activePairings.count {
-                    print("🔵 [DEBUG] ⚠️ New pairing was created (this is OK - SDK behavior)")
-                } else {
-                    print("🔵 [DEBUG] ✅ No new pairing created - existing pairing likely reused")
-                }
-                
-                // The session proposal is now on the relay
-                // MetaMask should receive it through the established pairing connection
-                print("🔵 [DEBUG] Session proposal sent to relay")
-                print("🔵 [DEBUG] MetaMask should receive it through pairing: \(establishedPairingTopic.prefix(16))...")
-                
-            } catch {
-                print("🔵 [DEBUG] ❌ Failed to create session proposal: \(error)")
-                throw WalletError.connectionFailed("Failed to create session proposal: \(error.localizedDescription)")
-            }
-            
-            // Give MetaMask time to receive and process the session proposal
-            // MetaMask needs to:
-            // 1. Receive the proposal notification through the relay
-            // 2. Process it and show the approval UI
-            print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] Giving MetaMask time to receive session proposal...")
-            print("🔵 [DEBUG] MetaMask should now show the approval popup")
-            print("🔵 [DEBUG] ========================================")
-            try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+            try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
             
             // Check if session was already created (user approved quickly)
             let sessions = Sign.instance.getSessions()
-            print("🔵 [DEBUG] Sessions after proposal: \(sessions.count)")
+            print("🔵 [DEBUG] Sessions after opening wallet: \(sessions.count)")
             if !sessions.isEmpty {
                 print("🔵 [DEBUG] ✅ Session already created - user approved quickly!")
+                if let session = sessions.first {
+                    print("🔵 [DEBUG] Session topic: \(session.topic.prefix(16))...")
+                }
             } else {
                 print("🔵 [DEBUG] ⏳ No session yet - waiting for user approval...")
-                print("🔵 [DEBUG] If MetaMask doesn't show popup, check:")
-                print("🔵 [DEBUG] - MetaMask app is open and active")
-                print("🔵 [DEBUG] - MetaMask is connected to relay")
-                print("🔵 [DEBUG] - Session proposal was received")
+                print("🔵 [DEBUG] If wallet doesn't show popup, check:")
+                print("🔵 [DEBUG] - Wallet app is open and active")
+                print("🔵 [DEBUG] - Wallet is connected to relay")
+                print("🔵 [DEBUG] - Wallet received the combined URI correctly")
             }
             
-            // STEP 4: Wait for user approval in wallet
+            // STEP 3: Wait for user approval in wallet
             connectionStage = .waitingForApproval
             print("🔵 [DEBUG] ========================================")
-            print("🔵 [DEBUG] STEP 4: Waiting for user approval")
+            print("🔵 [DEBUG] STEP 3: Waiting for user approval")
             print("🔵 [DEBUG] ========================================")
             print("🔵 [DEBUG] The wallet should now show the approval UI")
             print("🔵 [DEBUG] If it doesn't appear, check:")
             print("🔵 [DEBUG] - Wallet app is open and active")
-            print("🔵 [DEBUG] - Wallet received the URI correctly")
+            print("🔵 [DEBUG] - Wallet received the combined URI correctly")
             print("🔵 [DEBUG] - Wallet connected to relay")
             print("🔵 [DEBUG] Waiting for session settlement...")
             let session = try await waitForSession()
@@ -553,28 +494,38 @@ final class WalletService: ObservableObject {
         }
     }
     
-    /// Opens wallet app with SIMPLE encoding (for two-step pairing flow)
-    /// Simple encoding is more reliable - aggressive encoding may break URI parsing
+    /// Opens wallet app with proper encoding for query parameter values
+    /// The WC URI must be percent-encoded when passed as the value of ?uri=
     private func openWalletAppWithSimpleEncoding(walletType: WalletType, uri: WalletConnectURI) async -> Bool {
         let uriString = uri.absoluteString
         
         print("🔵 [DEBUG] ========================================")
-        print("🔵 [DEBUG] 📱 SIMPLE ENCODING MOBILE LINKING")
+        print("🔵 [DEBUG] 📱 QUERY PARAMETER ENCODING")
         print("🔵 [DEBUG] ========================================")
         print("🔵 [DEBUG] Wallet: \(walletType.displayName)")
         print("🔵 [DEBUG] Original URI: \(uriString)")
         
-        // Use SIMPLE encoding - just .urlQueryAllowed (standard URL encoding)
-        // This is more reliable than aggressive encoding which may break URI parsing
-        let simpleEncoded = uriString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? uriString
+        // CRITICAL: When the WC URI is passed as the VALUE of ?uri=, special characters
+        // like @, ?, &, = must be percent-encoded so they don't get interpreted as
+        // part of the outer URL structure.
+        // .urlQueryAllowed doesn't encode these because they're valid IN query strings,
+        // but we need them encoded because the WC URI IS the query parameter value.
         
-        print("🔵 [DEBUG] Simply encoded URI: \(simpleEncoded)")
+        // Create a character set that only allows unreserved characters (RFC 3986)
+        // This ensures @, ?, &, =, :, / are all encoded
+        var allowedCharacters = CharacterSet.alphanumerics
+        allowedCharacters.insert(charactersIn: "-._~") // RFC 3986 unreserved characters
+        
+        let properlyEncoded = uriString.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? uriString
+        
+        print("🔵 [DEBUG] Properly encoded URI: \(properlyEncoded.prefix(100))...")
+        print("🔵 [DEBUG] Encoding changed: \(uriString != properlyEncoded)")
         print("🔵 [DEBUG] ========================================")
         
         switch walletType {
         case .metamask:
             // Try deep link first (full screen), then universal link
-            let deepLink = "metamask://wc?uri=\(simpleEncoded)"
+            let deepLink = "metamask://wc?uri=\(properlyEncoded)"
             if let url = URL(string: deepLink) {
                 let canOpen = await MainActor.run {
                     UIApplication.shared.canOpenURL(url)
@@ -592,7 +543,7 @@ final class WalletService: ObservableObject {
                 }
             }
             // Fallback to universal link
-            let universalLink = "https://metamask.app.link/wc?uri=\(simpleEncoded)"
+            let universalLink = "https://metamask.app.link/wc?uri=\(properlyEncoded)"
             if let url = URL(string: universalLink) {
                 let canOpen = await MainActor.run {
                     UIApplication.shared.canOpenURL(url)
@@ -610,7 +561,7 @@ final class WalletService: ObservableObject {
             }
             
         case .coinbase:
-            let deepLink = "cbwallet://wc?uri=\(simpleEncoded)"
+            let deepLink = "cbwallet://wc?uri=\(properlyEncoded)"
             if let url = URL(string: deepLink) {
                 let canOpen = await MainActor.run {
                     UIApplication.shared.canOpenURL(url)
@@ -626,7 +577,7 @@ final class WalletService: ObservableObject {
                     }
                 }
             }
-            let universalLink = "https://go.cb-w.com/wc?uri=\(simpleEncoded)"
+            let universalLink = "https://go.cb-w.com/wc?uri=\(properlyEncoded)"
             if let url = URL(string: universalLink) {
                 let canOpen = await MainActor.run {
                     UIApplication.shared.canOpenURL(url)
@@ -644,7 +595,7 @@ final class WalletService: ObservableObject {
             }
             
         case .rabby:
-            let deepLink = "rabby://wc?uri=\(simpleEncoded)"
+            let deepLink = "rabby://wc?uri=\(properlyEncoded)"
             if let url = URL(string: deepLink) {
                 let canOpen = await MainActor.run {
                     UIApplication.shared.canOpenURL(url)
@@ -662,7 +613,7 @@ final class WalletService: ObservableObject {
             }
             
         case .rainbow:
-            let deepLink = "rainbow://wc?uri=\(simpleEncoded)"
+            let deepLink = "rainbow://wc?uri=\(properlyEncoded)"
             if let url = URL(string: deepLink) {
                 let canOpen = await MainActor.run {
                     UIApplication.shared.canOpenURL(url)
@@ -736,7 +687,7 @@ final class WalletService: ObservableObject {
             ("Deep Link", "cbwallet://wc?uri=\(encodedURI)")
         ]
         
-        for (name, urlString) in strategies {
+        for (_, urlString) in strategies {
             if let url = URL(string: urlString) {
                 let options: [UIApplication.OpenExternalURLOptionsKey: Any] = urlString.hasPrefix("https://") 
                     ? [.universalLinksOnly: true] 
@@ -1159,6 +1110,13 @@ final class WalletService: ObservableObject {
     /// Waits for a pairing to be established with the expected topic
     /// This is used in the two-step flow to ensure the wallet has connected to the relay
     private func waitForPairingEstablishment(expectedTopic: String, timeout: TimeInterval) async throws -> String {
+        let result = try await waitForPairingEstablishmentWithObject(expectedTopic: expectedTopic, timeout: timeout)
+        return result.topic
+    }
+    
+    /// Waits for a pairing to be established and returns both the pairing object and topic
+    /// This allows us to use the pairing object explicitly when creating session proposals
+    private func waitForPairingEstablishmentWithObject(expectedTopic: String, timeout: TimeInterval) async throws -> (pairing: WalletConnectPairing.Pairing, topic: String) {
         print("🔵 [DEBUG] Waiting for pairing establishment...")
         print("🔵 [DEBUG] Expected topic: \(expectedTopic.prefix(16))...")
         print("🔵 [DEBUG] Initial pairing count: \(Pair.instance.getPairings().count)")
@@ -1174,7 +1132,7 @@ final class WalletService: ObservableObject {
             if let matchingPairing = pairings.first(where: { $0.topic == expectedTopic && $0.expiryDate > now }) {
                 print("🔵 [DEBUG] ✅ Pairing established! Topic: \(matchingPairing.topic.prefix(16))...")
                 print("🔵 [DEBUG] Time waited: \(Double(i + 1) * checkInterval) seconds")
-                return matchingPairing.topic
+                return (pairing: matchingPairing, topic: matchingPairing.topic)
             }
             
             // Also check if any new pairing was created (wallet might use different topic)
@@ -1182,7 +1140,7 @@ final class WalletService: ObservableObject {
                 // After 2.5 seconds, if we have any valid pairing, use it
                 // This handles cases where the wallet creates a new pairing
                 print("🔵 [DEBUG] ⚠️ Using newest pairing (topic may differ): \(newestPairing.topic.prefix(16))...")
-                return newestPairing.topic
+                return (pairing: newestPairing, topic: newestPairing.topic)
             }
             
             if i < maxChecks - 1 {
@@ -1603,13 +1561,47 @@ final class WalletService: ObservableObject {
         
         // Build types dictionary - WalletConnect expects nested structure
         // Convert EIP712Types to the format WalletConnect expects
+        // CRITICAL: Preserve the exact order of fields as received from API
         var typesDict: [String: Any] = [:]
+        
+        // #region agent log
+        print("🟡 [HYPO-A,C,D] Building types dictionary from API response...")
+        print("🟡 [HYPO-A] Checking if EIP712Domain type exists: \(types.types["EIP712Domain"] != nil)")
+        print("🟡 [HYPO-C] Types keys from API: \(types.types.keys.sorted())")
+        // #endregion
+        
         for (typeName, fields) in types.types {
-            let fieldDicts: [[String: Any]] = fields.map { field in
+            // #region agent log
+            print("🟡 [HYPO-C,D] Processing type '\(typeName)' with \(fields.count) fields:")
+            for (index, field) in fields.enumerated() {
+                print("🟡 [HYPO-C,D]   Field[\(index)]: name='\(field.name)', type='\(field.type)'")
+            }
+            // #endregion
+            
+            // Use an array of dictionaries to preserve field order
+            let fieldDicts: [[String: String]] = fields.map { field in
+                // CRITICAL: Use ordered dictionary construction to ensure name comes before type
+                // This matches the API response format exactly
                 ["name": field.name, "type": field.type]
             }
             typesDict[typeName] = fieldDicts
         }
+        
+        // #region agent log
+        // HYPOTHESIS A: Check if we need to add EIP712Domain type
+        if typesDict["EIP712Domain"] == nil {
+            print("🟡 [HYPO-A] ⚠️ EIP712Domain type NOT in typesDict - adding it explicitly")
+            print("🟡 [HYPO-A] Some EIP-712 implementations require EIP712Domain in types")
+            // Add EIP712Domain type explicitly - some servers require this
+            typesDict["EIP712Domain"] = [
+                ["name": "name", "type": "string"],
+                ["name": "version", "type": "string"],
+                ["name": "chainId", "type": "uint256"],
+                ["name": "verifyingContract", "type": "address"]
+            ]
+            print("🟡 [HYPO-A] ✅ EIP712Domain type added to typesDict")
+        }
+        // #endregion
         
         // Build domain dictionary
         var domainDict: [String: Any] = [
@@ -1621,13 +1613,62 @@ final class WalletService: ObservableObject {
             domainDict["verifyingContract"] = verifyingContract
         }
         
+        // #region agent log
+        print("🟡 [HYPO-D,E] Domain dictionary:")
+        print("🟡 [HYPO-E]   name: '\(domain.name)'")
+        print("🟡 [HYPO-E]   version: '\(domain.version)'")
+        print("🟡 [HYPO-E]   chainId: \(domain.chainId) (type: Int)")
+        print("🟡 [HYPO-E]   verifyingContract: '\(domain.verifyingContract ?? "nil")'")
+        // #endregion
+        
         // Build message dictionary (convert AnyCodable to Any)
         // AnyCodable.value extracts the underlying value, handling nested structures
-        // CRITICAL: Preserve exact types and order for EIP-712 signature verification
+        // CRITICAL: Build messageDict in the EXACT order defined by the types array
+        // EIP-712 signature verification depends on field order matching the type definition
         var messageDict: [String: Any] = [:]
-        for (key, value) in message {
-            messageDict[key] = value.value
+        
+        // #region agent log
+        print("🟡 [HYPO-D] Building message dictionary from AnyCodable values...")
+        print("🟡 [HYPO-D] API message keys (raw order - UNORDERED): \(message.keys)")
+        // #endregion
+        
+        // Get the field order from the type definition
+        // This ensures the message fields match the order expected by the server
+        let primaryTypeFields = types.types[primaryType] ?? []
+        
+        // #region agent log
+        print("🟡 [HYPO-ORDER] Building messageDict in TYPE ORDER (not random dict order)")
+        print("🟡 [HYPO-ORDER] Primary type '\(primaryType)' field order:")
+        for (index, field) in primaryTypeFields.enumerated() {
+            print("🟡 [HYPO-ORDER]   [\(index)] \(field.name) : \(field.type)")
         }
+        // #endregion
+        
+        // Build messageDict in the order defined by the type
+        // This is CRITICAL for EIP-712 signature verification
+        for field in primaryTypeFields {
+            if let value = message[field.name] {
+            let extractedValue = value.value
+                messageDict[field.name] = extractedValue
+            // #region agent log
+                print("🟡 [HYPO-D]   \(field.name): \(extractedValue) (in TYPE ORDER, type: \(type(of: extractedValue)))")
+            // #endregion
+            } else {
+                print("⚠️ [HYPO-ORDER] WARNING: Field '\(field.name)' defined in type but not found in message!")
+            }
+        }
+        
+        // Check for any extra fields in message not defined in type
+        for key in message.keys {
+            if !primaryTypeFields.contains(where: { $0.name == key }) {
+                print("⚠️ [HYPO-ORDER] WARNING: Field '\(key)' in message but not defined in type!")
+            }
+        }
+        
+        // #region agent log
+        print("🟡 [HYPO-D] Final messageDict built in TYPE ORDER")
+        print("🟡 [HYPO-D] Expected order: \(primaryTypeFields.map { $0.name })")
+        // #endregion
         
         // Log the complete message structure being signed
         print("🔵 [DEBUG] 📋 MESSAGE STRUCTURE FOR SIGNING:")
@@ -1681,11 +1722,114 @@ final class WalletService: ObservableObject {
         }
         
         // Params for eth_signTypedData_v4: [address, typedData]
-        // CRITICAL: WalletConnect v2 expects the typed data as an OBJECT, not a JSON string
-        // This is the correct format according to WalletConnect v2 spec
-        // Some wallets (like MetaMask) may reject if it's a JSON string instead of object
-        // Wrap both elements in AnyCodable to ensure consistent array type
-        let params = AnyCodable([AnyCodable(address), AnyCodable(any: typedData)])
+        // CRITICAL: EIP-712 requires message fields in the EXACT order defined in types
+        // MetaMask uses the types definition order for hashing, NOT the message object order
+        // However, the server might reconstruct using message order, so we must match types order
+        
+        // Build message JSON string manually with fields in TYPE ORDER
+        // This ensures the JSON string has correct order before any parsing/re-serialization
+        func jsonEscape(_ string: String) -> String {
+            return string.replacingOccurrences(of: "\\", with: "\\\\")
+                         .replacingOccurrences(of: "\"", with: "\\\"")
+                         .replacingOccurrences(of: "\n", with: "\\n")
+                         .replacingOccurrences(of: "\r", with: "\\r")
+                         .replacingOccurrences(of: "\t", with: "\\t")
+        }
+        
+        func jsonValue(_ value: Any) -> String {
+            if let stringValue = value as? String {
+                return "\"\(jsonEscape(stringValue))\""
+            } else if let intValue = value as? Int {
+                return "\(intValue)"
+            } else if let boolValue = value as? Bool {
+                return boolValue ? "true" : "false"
+        } else {
+                return "\"\(value)\""
+            }
+        }
+        
+        // Build message JSON in TYPE ORDER
+        var messageJsonParts: [String] = []
+        for field in primaryTypeFields {
+            if let value = messageDict[field.name] {
+                messageJsonParts.append("\"\(field.name)\":\(jsonValue(value))")
+            }
+        }
+        let messageJson = "{\(messageJsonParts.joined(separator: ","))}"
+        
+        // Build types JSON - preserve field order from types definition
+        var typesJsonParts: [String] = []
+        for (typeName, fields) in typesDict.sorted(by: { $0.key < $1.key }) {
+            if let fieldsArray = fields as? [[String: String]] {
+                let fieldsJson = fieldsArray.map { field -> String in
+                    let name = field["name"] ?? ""
+                    let type = field["type"] ?? ""
+                    return "{\"name\":\"\(jsonEscape(name))\",\"type\":\"\(jsonEscape(type))\"}"
+                }.joined(separator: ",")
+                typesJsonParts.append("\"\(jsonEscape(typeName))\":[\(fieldsJson)]")
+            }
+        }
+        let typesJson = "{\(typesJsonParts.joined(separator: ","))}"
+        
+        // #region agent log
+        print("🟡 [HYPO-ORDER] Types JSON: \(typesJson)")
+        print("🟡 [HYPO-ORDER] Message JSON: \(messageJson)")
+        // #endregion
+        
+        // Build domain JSON in standard order
+        var domainJsonParts: [String] = []
+        domainJsonParts.append("\"name\":\"\(jsonEscape(domain.name))\"")
+        domainJsonParts.append("\"version\":\"\(jsonEscape(domain.version))\"")
+        domainJsonParts.append("\"chainId\":\(domain.chainId)")
+        if let verifyingContract = domain.verifyingContract, !verifyingContract.isEmpty {
+            domainJsonParts.append("\"verifyingContract\":\"\(jsonEscape(verifyingContract))\"")
+        }
+        let domainJson = "{\(domainJsonParts.joined(separator: ","))}"
+        
+        // Build complete typed data JSON string with correct field order
+        // Order: types, primaryType, domain, message (standard EIP-712 order)
+        let typedDataJson = "{\"types\":\(typesJson),\"primaryType\":\"\(jsonEscape(primaryType))\",\"domain\":\(domainJson),\"message\":\(messageJson)}"
+        
+        // #region agent log
+        print("🟡 [HYPO-ORDER] ========================================")
+        print("🟡 [HYPO-ORDER] TYPED DATA JSON (manually built with TYPE ORDER):")
+        print("🟡 [HYPO-ORDER] Message field order: \(primaryTypeFields.map { $0.name })")
+        print("🟡 [HYPO-ORDER] JSON length: \(typedDataJson.count)")
+        print("🟡 [HYPO-ORDER] JSON preview: \(String(typedDataJson.prefix(300)))...")
+        print("🟡 [HYPO-ORDER] ========================================")
+        // #endregion
+        
+        // CRITICAL: Send JSON string directly WITHOUT parsing back to dictionary
+        // Parsing would lose field order (Swift dictionaries don't preserve order)
+        // WalletConnect's AnyCodable should pass the JSON string through to MetaMask
+        // MetaMask will parse it and use types definition order for hashing (per EIP-712 spec)
+        // The server should also use types order, but if it uses message order, our JSON string has correct order
+        
+        // #region agent log
+        print("🟡 [HYPO-ORDER] ========================================")
+        print("🟡 [HYPO-ORDER] FINAL DECISION: Sending JSON STRING directly")
+        print("🟡 [HYPO-ORDER] Reason: Parsing to dict would lose field order")
+        print("🟡 [HYPO-ORDER] JSON string has message in TYPE ORDER: \(primaryTypeFields.map { $0.name })")
+        print("🟡 [HYPO-ORDER] WalletConnect should pass JSON string through to MetaMask")
+        print("🟡 [HYPO-ORDER] MetaMask will parse and use types order for hashing")
+        print("🟡 [HYPO-ORDER] ========================================")
+        // #endregion
+        
+        var params: AnyCodable
+        print("🟡 [HYPO-ORDER] Sending typed data as JSON STRING (preserves field order)")
+        print("🟡 [HYPO-ORDER] Message fields in JSON string order: \(primaryTypeFields.map { $0.name })")
+        print("🟡 [HYPO-ORDER] JSON string length: \(typedDataJson.count)")
+        print("🟡 [HYPO-ORDER] JSON will be passed directly to MetaMask without parsing")
+        params = AnyCodable([address, typedDataJson])
+        // #endregion
+        
+        // Verify the typed data structure is valid
+        if typesDict.isEmpty {
+            print("⚠️ [DEBUG] WARNING: typesDict is empty!")
+        }
+        if messageDict.isEmpty {
+            print("⚠️ [DEBUG] WARNING: messageDict is empty!")
+        }
         
         print("🔵 [DEBUG] ========================================")
         print("🔵 [DEBUG] 📋 EIP-712 SIGNING PARAMETERS")
@@ -1697,17 +1841,11 @@ final class WalletService: ObservableObject {
         print("🔵 [DEBUG] Message keys: \(message.keys.sorted())")
         print("🔵 [DEBUG] Types count: \(typesDict.count)")
         print("🔵 [DEBUG] Message dict count: \(messageDict.count)")
-        print("🔵 [DEBUG] ✅ Typed data format: OBJECT (not JSON string) - correct for WalletConnect v2")
+        print("🔵 [DEBUG] ✅ Typed data format: JSON STRING (preserves field order)")
+        print("🔵 [DEBUG] ✅ Message field order in JSON: \(primaryTypeFields.map { $0.name })")
         print("🔵 [DEBUG] ✅ Timestamp in message: \(signedTimestamp)")
+        print("🔵 [DEBUG] ✅ EIP712Domain in types: \(typesDict["EIP712Domain"] != nil)")
         print("🔵 [DEBUG] ========================================")
-        
-        // Verify the typed data structure is valid
-        if typesDict.isEmpty {
-            print("⚠️ [DEBUG] WARNING: typesDict is empty!")
-        }
-        if messageDict.isEmpty {
-            print("⚠️ [DEBUG] WARNING: messageDict is empty!")
-        }
         
         let request = try Request(
             topic: session.topic,
@@ -1963,6 +2101,27 @@ final class WalletService: ObservableObject {
                                 // #region agent log
                                 print("🟡 [HYPO-SIG] Signature received - length: \(signature.count), starts with 0x: \(signature.hasPrefix("0x"))")
                                 print("🟡 [HYPO-SIG] Signature preview: \(String(signature.prefix(20)))...")
+                                
+                                // HYPOTHESIS B: Analyze signature v-value
+                                // EIP-712 signatures are 65 bytes: r(32) + s(32) + v(1)
+                                // Hex: 130 chars for r+s, 2 chars for v, plus "0x" prefix = 132 chars
+                                if signature.hasPrefix("0x") && signature.count == 132 {
+                                    let vHex = String(signature.suffix(2))  // Last 2 hex chars = v value
+                                    if let vValue = UInt8(vHex, radix: 16) {
+                                        print("🟡 [HYPO-B] Signature v-value: \(vValue) (0x\(vHex))")
+                                        print("🟡 [HYPO-B] v=27 or v=28 is standard Ethereum format")
+                                        print("🟡 [HYPO-B] v=0 or v=1 is EIP-155/normalized format")
+                                        if vValue == 27 || vValue == 28 {
+                                            print("🟡 [HYPO-B] ✅ v-value is standard (27/28) - server may expect this OR 0/1")
+                                            let normalizedV = vValue - 27
+                                            print("🟡 [HYPO-B] If server expects normalized: would be v=\(normalizedV)")
+                                        } else if vValue == 0 || vValue == 1 {
+                                            print("🟡 [HYPO-B] v-value is already normalized (0/1)")
+                                        } else {
+                                            print("🟡 [HYPO-B] ⚠️ Unusual v-value: \(vValue)")
+                                        }
+                                    }
+                                }
                                 // #endregion
                                 continuation.resume(returning: signature)
                             } else {
@@ -2013,16 +2172,44 @@ final class WalletService: ObservableObject {
             chainId: Blockchain("eip155:\(Constants.Network.arbitrumChainId)")!
         )
         
-        do {            
-            _ = try await Sign.instance.request(params: request)
+        do {
+            // #region agent log
+            print("🟡 [HYPO-TX] Sending transaction request to wallet...")
+            print("🟡 [HYPO-TX] Method: \(method)")
+            print("🟡 [HYPO-TX] To: \(to)")
+            print("🟡 [HYPO-TX] Value: \(value)")
+            print("🟡 [HYPO-TX] Data length: \(data.count)")
+            print("🟡 [HYPO-TX] Session topic: \(session.topic)")
+            // #endregion
+            
+            // Send the request FIRST - WalletConnect v2 will handle the notification to the wallet
+            print("🔵 [DEBUG] About to call Sign.instance.request for transaction...")
+            try await Sign.instance.request(params: request)
+            print("🔵 [DEBUG] Sign.instance.request completed for transaction")
+            
+            // Open the wallet IMMEDIATELY after sending the request (no delay)
+            // WalletConnect v2 should deliver the notification automatically
+            // Opening the wallet ensures the user can see and approve the transaction
+            await openWalletForSigning()
+            
+            // #region agent log
+            print("🟡 [HYPO-TX] Request sent successfully")
+            print("🟡 [HYPO-TX] Waiting for transaction response on topic: \(session.topic)...")
+            // #endregion
+            
             return try await waitForTransactionResponse(topic: session.topic)
         } catch {
+            print("🔵 [DEBUG] ❌ Transaction request failed: \(error.localizedDescription)")
             throw WalletError.transactionFailed(error.localizedDescription)
         }
     }
     
     private func waitForTransactionResponse(topic: String) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+        // #region agent log
+        print("🟡 [HYPO-TX] Setting up transaction response listener for topic: \(topic)")
+        // #endregion
+        
+        return try await withCheckedThrowingContinuation { continuation in
             var cancellable: AnyCancellable?
             
             cancellable = Sign.instance.sessionResponsePublisher
@@ -2032,19 +2219,36 @@ final class WalletService: ObservableObject {
                 .sink(
                     receiveCompletion: { completion in
                         if case .failure(let error) = completion {
-                            continuation.resume(throwing: error)
+                            // #region agent log
+                            print("🟡 [HYPO-TX] Transaction response timeout or error: \(error.localizedDescription)")
+                            // #endregion
+                            continuation.resume(throwing: WalletError.transactionFailed(error.localizedDescription))
                         }
                         cancellable?.cancel()
                     },
                     receiveValue: { response in
+                        // #region agent log
+                        print("🟡 [HYPO-TX] Received transaction response on topic: \(response.topic)")
+                        // #endregion
+                        
                         switch response.result {
                         case .response(let value):
                             if let txHash = try? value.get(String.self) {
+                                // #region agent log
+                                print("🟡 [HYPO-TX] ✅ Transaction hash received: \(txHash)")
+                                // #endregion
                                 continuation.resume(returning: txHash)
                             } else {
+                                // #region agent log
+                                print("🟡 [HYPO-TX] ❌ Invalid transaction response format")
+                                // #endregion
                                 continuation.resume(throwing: WalletError.transactionFailed("Invalid response"))
                             }
                         case .error(let error):
+                            // #region agent log
+                            print("🟡 [HYPO-TX] ❌ Transaction error from wallet: \(error.message)")
+                            print("🟡 [HYPO-TX] Error code: \(error.code)")
+                            // #endregion
                             continuation.resume(throwing: WalletError.transactionFailed(error.message))
                         }
                         cancellable?.cancel()

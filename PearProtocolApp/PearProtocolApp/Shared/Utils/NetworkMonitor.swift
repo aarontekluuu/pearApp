@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Combine
+import SwiftUI
 
 // MARK: - Network Monitor
 /// Monitors network connectivity and provides real-time status updates
@@ -29,8 +30,8 @@ final class NetworkMonitor: ObservableObject {
         startMonitoring()
     }
     
-    deinit {
-        stopMonitoring()
+    nonisolated deinit {
+        monitor.cancel()
     }
     
     // MARK: - Monitoring
@@ -67,7 +68,9 @@ final class NetworkMonitor: ObservableObject {
 
 // MARK: - Network Status View Modifier
 struct NetworkStatusModifier: ViewModifier {
-    @StateObject private var networkMonitor = NetworkMonitor.shared
+    @StateObject private var networkMonitor: NetworkMonitor = {
+        NetworkMonitor.shared
+    }()
     @State private var showOfflineBanner = false
     
     func body(content: Content) -> some View {

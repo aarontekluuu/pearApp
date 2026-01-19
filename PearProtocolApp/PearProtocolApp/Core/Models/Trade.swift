@@ -1,64 +1,145 @@
 import Foundation
 
 // MARK: - Trade Request
-/// Request model for executing a basket trade
+/// Request model for executing a basket trade (POST /positions)
+/// Matches CreatePositionRequestDto from Pear Protocol API
 struct TradeExecuteRequest: Codable {
-    let basket: BasketTradePayload
-    let agentWalletAddress: String
-    let slippage: Double?
-    let reduceOnly: Bool
+    let slippage: Double  // Required: 0.001-0.1 (where 0.01 = 1%)
+    let executionType: String  // Required: "SYNC" | "MARKET" | "TRIGGER" | "TWAP" | "LADDER" | etc.
+    let leverage: Double  // Required: 1-100
+    let usdValue: Double  // Required: minimum 1
+    let longAssets: [PairAssetDto]?  // Optional: array of {asset: string, weight?: number}
+    let shortAssets: [PairAssetDto]?  // Optional: array of {asset: string, weight?: number}
+    let stopLoss: TpSlThreshold?  // Optional: TpSlThreshold object
+    let takeProfit: TpSlThreshold?  // Optional: TpSlThreshold object
     
     init(
         basket: Basket,
-        agentWalletAddress: String,
-        slippage: Double? = 0.5,
-        reduceOnly: Bool = false
+        slippage: Double = 0.005,  // Default 0.5% (0.005)
+        executionType: String = "MARKET",
+        leverage: Double = 1.0
     ) {
-        self.basket = BasketTradePayload(from: basket)
-        self.agentWalletAddress = agentWalletAddress
+        // Required fields
         self.slippage = slippage
-        self.reduceOnly = reduceOnly
-    }
-}
-
-// MARK: - Basket Trade Payload
-struct BasketTradePayload: Codable {
-    let name: String
-    let legs: [LegPayload]
-    let totalSize: Double
-    let takeProfitPercent: Double?
-    let stopLossPercent: Double?
-    
-    init(from basket: Basket) {
-        self.name = basket.displayName
-        self.legs = basket.legs.map { LegPayload(from: $0) }
-        self.totalSize = basket.totalSize
-        self.takeProfitPercent = basket.takeProfitPercent
-        self.stopLossPercent = basket.stopLossPercent
-    }
-    
-    struct LegPayload: Codable {
-        let assetId: String
-        let direction: String
-        let weight: Double
+        self.executionType = executionType
+        self.leverage = leverage
+        self.usdValue = basket.totalSize
         
-        init(from leg: BasketLeg) {
-            self.assetId = leg.asset.id
-            self.direction = leg.direction.rawValue
-            self.weight = leg.weight
+        // Convert basket legs to longAssets/shortAssets arrays
+        var longAssetsArray: [PairAssetDto] = []
+        var shortAssetsArray: [PairAssetDto] = []
+        
+        for leg in basket.legs {
+            // Convert weight from percentage (0-100) to decimal (0.0001-1.0)
+            let weightDecimal = max(0.0001, min(1.0, leg.weight / 100.0))
+            
+            let pairAsset = PairAssetDto(
+                asset: leg.asset.ticker,  // Use ticker (symbol) not id
+                weight: weightDecimal
+            )
+            
+            if leg.direction == .long {
+                longAssetsArray.append(pairAsset)
+            } else {
+                shortAssetsArray.append(pairAsset)
+            }
+        }
+        
+        self.longAssets = longAssetsArray.isEmpty ? nil : longAssetsArray
+        self.shortAssets = shortAssetsArray.isEmpty ? nil : shortAssetsArray
+        
+        // Convert TP/SL from percentages to TpSlThreshold objects
+        if let tpPercent = basket.takeProfitPercent {
+            self.takeProfit = TpSlThreshold(
+                type: "PERCENTAGE",
+                value: tpPercent,
+                isTrailing: false,
+                trailingDeltaValue: nil,
+                trailingActivationValue: nil
+            )
+        } else {
+            self.takeProfit = nil
+        }
+        
+        if let slPercent = basket.stopLossPercent {
+            self.stopLoss = TpSlThreshold(
+                type: "PERCENTAGE",
+                value: slPercent,
+                isTrailing: false,
+                trailingDeltaValue: nil,
+                trailingActivationValue: nil
+            )
+        } else {
+            self.stopLoss = nil
         }
     }
 }
 
+// MARK: - TP/SL Threshold
+/// Stop loss or take profit threshold configuration
+struct TpSlThreshold: Codable {
+    let type: String  // "PERCENTAGE" | "DOLLAR" | "POSITION_VALUE" | "PRICE" | "PRICE_RATIO" | "WEIGHTED_RATIO"
+    let value: Double
+    let isTrailing: Bool?
+    let trailingDeltaValue: Double?
+    let trailingActivationValue: Double?
+}
+
 // MARK: - Trade Response
+/// Response from POST /positions (CreatePositionResponseDto)
 struct TradeExecuteResponse: Codable {
     let orderId: String
-    let positionId: String
-    let status: TradeStatus
-    let executedLegs: [ExecutedLeg]?
-    let totalFees: Double
-    let timestamp: Date
-    let message: String?
+    let fills: [Fill]?
+    
+    // Computed properties for backward compatibility
+    var positionId: String {
+        orderId  // Use orderId as positionId for now
+    }
+    
+    var status: TradeStatus {
+        .pending  // Default status - will be updated from position status
+    }
+    
+    var executedLegs: [ExecutedLeg]? {
+        fills?.map { fill in
+            ExecutedLeg(
+                assetId: fill.coin ?? "",
+                direction: fill.side ?? "LONG",
+                executedPrice: fill.px ?? 0,
+                executedSize: fill.sz ?? 0,
+                fee: 0  // Fee not in fill object
+            )
+        }
+    }
+    
+    var totalFees: Double {
+        0  // Calculate from fills if needed
+    }
+    
+    var timestamp: Date {
+        Date()
+    }
+    
+    var message: String? {
+        nil
+    }
+}
+
+// MARK: - Fill
+/// Fill information from Hyperliquid
+struct Fill: Codable {
+    let coin: String?
+    let px: Double?  // Price
+    let sz: Double?  // Size
+    let side: String?  // "A" (ask/long) or "B" (bid/short)
+    let time: Int64?
+    let startPosition: String?
+    let dir: String?
+    let closedPnl: String?
+    let hash: String?
+    let oid: Int64?
+    let crossed: Bool?
+    let closedSize: String?
 }
 
 // MARK: - Executed Leg
@@ -181,39 +262,4 @@ struct TradeHistoryResponse: Codable {
     let totalFees: Double
     let totalTrades: Int
     let winRate: Double
-}
-
-// MARK: - Sample Data
-extension TradeHistoryItem {
-    static let sample = TradeHistoryItem(
-        id: "trade_001",
-        basketName: "BTC/ETH Pair",
-        entryValue: 1000,
-        exitValue: 1150,
-        realizedPnL: 145,
-        realizedPnLPercent: 14.5,
-        fees: 5,
-        openedAt: Date().addingTimeInterval(-86400 * 3),
-        closedAt: Date().addingTimeInterval(-86400 * 2),
-        legs: [
-            HistoryLeg(
-                assetId: "BTC",
-                assetTicker: "BTC",
-                direction: .long,
-                entryPrice: 42000,
-                exitPrice: 44500,
-                size: 500,
-                pnl: 85
-            ),
-            HistoryLeg(
-                assetId: "ETH",
-                assetTicker: "ETH",
-                direction: .short,
-                entryPrice: 2400,
-                exitPrice: 2280,
-                size: 500,
-                pnl: 60
-            )
-        ]
-    )
 }

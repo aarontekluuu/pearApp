@@ -58,19 +58,24 @@ PearProtocolApp/
 
 ## API Integration
 
-**Base URL**: `https://api.pearprotocol.io`
-**WebSocket**: `wss://api.pearprotocol.io/ws`
+**Base URL**: `https://hl-v2.pearprotocol.io` (Pear Protocol Hyperliquid V2 production/mainnet)
+**WebSocket**: `wss://hl-v2.pearprotocol.io/ws`
+
+**Note**: This endpoint connects to Hyperliquid mainnet (`https://api.hyperliquid.xyz`) via Pear Protocol's abstraction layer for pair trading.
 
 ### Endpoints
 
 | Endpoint | Method | Use |
 |----------|--------|-----|
-| `/agentWallet` | GET/POST | Agent wallet CRUD |
-| `/activeAssets` | GET | Fetch tradeable assets |
-| `/trade/execute` | POST | Execute basket trade |
-| `/trade/close` | POST | Close position |
+| `/agent-wallet` | GET/POST | Agent wallet CRUD |
+| `/assets` | GET | Fetch tradeable assets |
+| `/positions` | POST | Execute basket trade (create position) |
+| `/positions/{id}/close` | POST | Close position |
 | `/positions` | GET | Fetch positions |
-| `/tradeHistory` | GET | Trade history |
+| `/positions/history` | GET | Trade history |
+| `/auth/eip712-message` | GET | Get EIP-712 message for signing |
+| `/auth/login` | POST | Authenticate with signature |
+| `/auth/refresh` | POST | Refresh authentication token |
 
 ### WebSocket Channels
 - `prices.<assetId>` - Real-time price updates

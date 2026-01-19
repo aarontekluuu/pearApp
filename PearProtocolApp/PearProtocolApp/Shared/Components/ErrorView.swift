@@ -6,19 +6,19 @@ struct ErrorView: View {
     var retryAction: (() -> Void)? = nil
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Constants.UI.spacingMD + 4) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 48))
                 .foregroundColor(.pearLoss)
             
-            VStack(spacing: 8) {
+            VStack(spacing: Constants.UI.spacingSM) {
                 Text("Something went wrong")
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(.textPrimary)
                 
                 Text(message)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -43,28 +43,28 @@ struct EmptyStateView: View {
     var action: (() -> Void)? = nil
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Constants.UI.spacingMD + 4) {
             Image(systemName: icon)
                 .font(.system(size: 56))
-                .foregroundColor(.secondary)
+                .foregroundColor(.iconTertiary)
             
-            VStack(spacing: 8) {
+            VStack(spacing: Constants.UI.spacingSM) {
                 Text(title)
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(.textPrimary)
                 
                 Text(message)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.textTertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, Constants.UI.spacingXL)
             }
             
             if let actionTitle = actionTitle, let action = action {
                 SecondaryButton(title: actionTitle) {
                     action()
                 }
-                .padding(.top, 8)
+                .padding(.top, Constants.UI.spacingSM)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -77,30 +77,35 @@ struct ErrorBanner: View {
     var dismissAction: (() -> Void)? = nil
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.UI.spacingSM + 4) {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundColor(.pearLoss)
+                .font(.system(size: 18))
             
             Text(message)
-                .font(.subheadline)
-                .foregroundColor(.white)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.textPrimary)
                 .lineLimit(2)
             
             Spacer()
             
             if let dismissAction = dismissAction {
-                Button(action: dismissAction) {
+                Button(action: {
+                    HapticManager.shared.lightTap()
+                    dismissAction()
+                }) {
                     Image(systemName: "xmark")
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.iconTertiary)
                 }
             }
         }
-        .padding()
-        .background(Color.pearLoss.opacity(0.15))
-        .cornerRadius(12)
+        .padding(Constants.UI.cardPadding)
+        .background(Color.pearLoss.opacity(0.12))
+        .cornerRadius(Constants.UI.cornerRadius)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.pearLoss.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
+                .stroke(Color.pearLoss.opacity(0.2), lineWidth: 1)
         )
     }
 }
@@ -111,31 +116,81 @@ struct SuccessBanner: View {
     var dismissAction: (() -> Void)? = nil
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.UI.spacingSM + 4) {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.pearProfit)
+                .font(.system(size: 18))
             
             Text(message)
-                .font(.subheadline)
-                .foregroundColor(.white)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.textPrimary)
                 .lineLimit(2)
             
             Spacer()
             
             if let dismissAction = dismissAction {
-                Button(action: dismissAction) {
+                Button(action: {
+                    HapticManager.shared.lightTap()
+                    dismissAction()
+                }) {
                     Image(systemName: "xmark")
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.iconTertiary)
                 }
             }
         }
-        .padding()
-        .background(Color.pearProfit.opacity(0.15))
-        .cornerRadius(12)
+        .padding(Constants.UI.cardPadding)
+        .background(Color.pearProfit.opacity(0.12))
+        .cornerRadius(Constants.UI.cornerRadius)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.pearProfit.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
+                .stroke(Color.pearProfit.opacity(0.2), lineWidth: 1)
         )
+        .onAppear {
+            HapticManager.shared.success()
+        }
+    }
+}
+
+// MARK: - Warning Banner
+struct WarningBanner: View {
+    let message: String
+    var dismissAction: (() -> Void)? = nil
+    
+    var body: some View {
+        HStack(spacing: Constants.UI.spacingSM + 4) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.pearWarning)
+                .font(.system(size: 18))
+            
+            Text(message)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.textPrimary)
+                .lineLimit(2)
+            
+            Spacer()
+            
+            if let dismissAction = dismissAction {
+                Button(action: {
+                    HapticManager.shared.lightTap()
+                    dismissAction()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.iconTertiary)
+                }
+            }
+        }
+        .padding(Constants.UI.cardPadding)
+        .background(Color.pearWarning.opacity(0.12))
+        .cornerRadius(Constants.UI.cornerRadius)
+        .overlay(
+            RoundedRectangle(cornerRadius: Constants.UI.cornerRadius)
+                .stroke(Color.pearWarning.opacity(0.2), lineWidth: 1)
+        )
+        .onAppear {
+            HapticManager.shared.warning()
+        }
     }
 }
 
@@ -148,68 +203,41 @@ struct ToastView: View {
         case info
         case success
         case error
+        case warning
         
         var icon: String {
             switch self {
             case .info: return "info.circle.fill"
             case .success: return "checkmark.circle.fill"
             case .error: return "exclamationmark.circle.fill"
+            case .warning: return "exclamationmark.triangle.fill"
             }
         }
         
         var color: Color {
             switch self {
-            case .info: return .blue
+            case .info: return .pearPrimary
             case .success: return .pearProfit
             case .error: return .pearLoss
+            case .warning: return .pearWarning
             }
         }
     }
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.UI.spacingSM + 4) {
             Image(systemName: type.icon)
                 .foregroundColor(type.color)
+                .font(.system(size: 16))
             
             Text(message)
-                .font(.subheadline)
-                .foregroundColor(.white)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.textPrimary)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, Constants.UI.spacingMD + 4)
+        .padding(.vertical, Constants.UI.spacingSM + 6)
         .background(Color.backgroundSecondary)
         .cornerRadius(25)
         .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
     }
-}
-
-#Preview {
-    VStack(spacing: 24) {
-        ErrorView(message: "Network connection failed") {
-            print("Retry")
-        }
-        .frame(height: 250)
-        
-        EmptyStateView(
-            icon: "tray",
-            title: "No Positions",
-            message: "You don't have any open positions yet",
-            actionTitle: "Create Basket"
-        ) {
-            print("Action")
-        }
-        .frame(height: 250)
-        
-        ErrorBanner(message: "Failed to load positions") {
-            print("Dismiss")
-        }
-        
-        SuccessBanner(message: "Trade executed successfully") {
-            print("Dismiss")
-        }
-        
-        ToastView(message: "Position closed", type: .success)
-    }
-    .padding()
-    .background(Color.backgroundPrimary)
 }

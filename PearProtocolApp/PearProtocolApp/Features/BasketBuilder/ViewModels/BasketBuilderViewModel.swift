@@ -5,6 +5,9 @@ import Combine
 // MARK: - Basket Builder ViewModel
 @MainActor
 final class BasketBuilderViewModel: ObservableObject {
+    // MARK: - Shared Instance
+    static let shared = BasketBuilderViewModel()
+    
     // MARK: - Published State
     @Published var basket: Basket = Basket()
     @Published var positionSize: String = ""
@@ -24,6 +27,11 @@ final class BasketBuilderViewModel: ObservableObject {
     private let apiService = PearAPIService.shared
     private let webSocketService = WebSocketService.shared
     private var cancellables = Set<AnyCancellable>()
+    
+    // MARK: - Init
+    private init() {
+        setupPriceSubscription()
+    }
     
     // MARK: - Computed Properties
     var positionSizeValue: Double {
@@ -63,10 +71,6 @@ final class BasketBuilderViewModel: ObservableObject {
         return basket.legs.map { "\($0.asset.ticker) \($0.direction.displayName)" }.joined(separator: ", ")
     }
     
-    // MARK: - Init
-    init() {
-        setupPriceSubscription()
-    }
     
     private func setupPriceSubscription() {
         webSocketService.priceUpdates
@@ -143,14 +147,18 @@ final class BasketBuilderViewModel: ObservableObject {
         executionError = nil
         
         do {
+            // Create request with new structure (no agentWalletAddress needed)
             let request = TradeExecuteRequest(
                 basket: basket,
-                agentWalletAddress: agentWallet.address
+                slippage: 0.005,  // 0.5% default
+                executionType: "MARKET",
+                leverage: Constants.Trading.defaultLeverage
             )
             
             let response = try await apiService.executeTrade(request: request)
             
-            if response.status.isSuccess {
+            // Response now has orderId and fills - treat as success if orderId exists
+            if !response.orderId.isEmpty {
                 lastExecutedTrade = response
                 
                 // Trigger success haptic
@@ -160,7 +168,7 @@ final class BasketBuilderViewModel: ObservableObject {
                 // Reset basket after successful trade
                 resetBasket()
             } else {
-                executionError = response.message ?? "Trade execution failed"
+                executionError = "Trade execution failed - no order ID returned"
                 showError = true
                 
                 let generator = UINotificationFeedbackGenerator()

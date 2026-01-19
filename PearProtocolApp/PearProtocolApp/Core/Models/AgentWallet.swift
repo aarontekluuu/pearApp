@@ -66,11 +66,22 @@ struct AgentWalletCreateRequest: Codable {
 struct AgentWalletCreateResponse: Codable {
     let agentWalletAddress: String
     let messageToSign: String
-    let expiresAt: Date
-    let nonce: String
+    let expiresAt: Date?
+    let nonce: String?
     let authToken: String?
     let clientToken: String?
     let token: String?
+    
+    // API returns "message" but we use "messageToSign" internally
+    enum CodingKeys: String, CodingKey {
+        case agentWalletAddress
+        case messageToSign = "message"
+        case expiresAt
+        case nonce
+        case authToken
+        case clientToken
+        case token
+    }
 
     var resolvedAuthToken: String? {
         authToken ?? clientToken ?? token
@@ -152,40 +163,4 @@ struct WalletInfo: Codable {
     var hasEnoughForGas: Bool {
         ethBalance > 0.001 // Minimum ETH for gas
     }
-}
-
-// MARK: - Sample Data
-extension AgentWallet {
-    static let sample = AgentWallet(
-        address: "0x1234567890abcdef1234567890abcdef12345678",
-        createdAt: Date().addingTimeInterval(-86400 * 30),
-        expiresAt: Date().addingTimeInterval(86400 * 150),
-        isApproved: true,
-        approvalSignature: "0xsignature..."
-    )
-    
-    static let expiringSoon = AgentWallet(
-        address: "0xabcdef1234567890abcdef1234567890abcdef12",
-        createdAt: Date().addingTimeInterval(-86400 * 175),
-        expiresAt: Date().addingTimeInterval(86400 * 5),
-        isApproved: true,
-        approvalSignature: "0xsignature..."
-    )
-    
-    static let pendingApproval = AgentWallet(
-        address: "0xfedcba0987654321fedcba0987654321fedcba09",
-        createdAt: Date(),
-        expiresAt: Date().addingTimeInterval(86400 * 180),
-        isApproved: false,
-        approvalSignature: nil
-    )
-}
-
-extension WalletInfo {
-    static let sample = WalletInfo(
-        address: "0x742d35Cc6634C0532925a3b844Bc9e7595f5aE31",
-        chainId: Constants.Network.arbitrumChainId,
-        ethBalance: 0.125,
-        usdcBalance: 2500.00
-    )
 }

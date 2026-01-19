@@ -34,7 +34,41 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
+    <key>UIRequiresFullScreen</key>
+    <true/>
     <key>UIUserInterfaceStyle</key>
     <string>Dark</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>io.pearprotocol.app</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>pearprotocol</string>
+            </array>
+        </dict>
+    </array>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>metamask</string>
+        <string>trust</string>
+        <string>safe</string>
+        <string>rainbow</string>
+        <string>uniswap</string>
+        <string>zerion</string>
+        <string>imtokenv2</string>
+        <string>spot</string>
+        <string>omni</string>
+        <string>dfw</string>
+        <string>tpoutside</string>
+        <string>bnc</string>
+        <string>exodus</string>
+        <string>wc</string>
+        <string>cbwallet</string>
+        <string>frontier</string>
+        <string>safemobile</string>
+        <string>rabby</string>
+    </array>
 </dict>
 </plist>

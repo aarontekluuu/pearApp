@@ -71,12 +71,12 @@ struct PositionDetailHeader: View {
             // Status badge
             HStack(spacing: 6) {
                 Circle()
-                    .fill(position.status == .open ? Color.pearProfit : Color.secondary)
+                    .fill(position.status == .open ? Color.pearProfit : Color.textTertiary)
                     .frame(width: 8, height: 8)
                 
                 Text(position.status.displayName)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textSecondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -86,7 +86,7 @@ struct PositionDetailHeader: View {
             // Time open
             Text("Open for \(position.timeOpen)")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.textTertiary)
         }
     }
 }
@@ -101,7 +101,7 @@ struct PnLSummaryCard: View {
             VStack(spacing: 4) {
                 Text("Unrealized P&L")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
                 
                 Text(position.formattedPnL)
                     .font(.system(size: 36, weight: .bold))
@@ -109,34 +109,35 @@ struct PnLSummaryCard: View {
                 
                 Text(position.formattedPnLPercent)
                     .font(.headline)
-                    .foregroundColor(Color.pnlColor(for: position.totalPnL))
+                    .foregroundColor(Color.pnlColor(for: position.totalPnL).opacity(0.8))
             }
             
             Divider()
+                .background(Color.borderSubtle)
             
             // Value comparison
             HStack(spacing: 32) {
                 VStack(spacing: 4) {
                     Text("Entry Value")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                     
                     Text(position.formattedEntryValue)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                 }
                 
                 Image(systemName: "arrow.right")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.iconTertiary)
                 
                 VStack(spacing: 4) {
                     Text("Current Value")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                     
                     Text(position.formattedCurrentValue)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                 }
             }
         }
@@ -154,7 +155,7 @@ struct PositionLegsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Basket Legs")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 0) {
                 ForEach(legs) { leg in
@@ -162,6 +163,7 @@ struct PositionLegsSection: View {
                     
                     if leg.id != legs.last?.id {
                         Divider()
+                            .background(Color.borderSubtle)
                             .padding(.leading, 56)
                     }
                 }
@@ -185,7 +187,7 @@ struct PositionLegRow: View {
                 HStack(spacing: 8) {
                     Text(leg.assetTicker)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                     
                     DirectionBadge(direction: leg.direction)
                 }
@@ -193,11 +195,11 @@ struct PositionLegRow: View {
                 HStack(spacing: 12) {
                     Text("Entry: \(leg.formattedEntryPrice)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textQuaternary)
                     
                     Text("Now: \(leg.formattedCurrentPrice)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                 }
             }
             
@@ -211,7 +213,7 @@ struct PositionLegRow: View {
                 
                 Text(leg.formattedPnLPercent)
                     .font(.caption)
-                    .foregroundColor(Color.pnlColor(for: leg.unrealizedPnL))
+                    .foregroundColor(Color.pnlColor(for: leg.unrealizedPnL).opacity(0.8))
             }
         }
         .padding(.vertical, 12)
@@ -226,13 +228,13 @@ struct TradeInfoSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Trade Info")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 12) {
-                InfoRow(label: "Margin Used", value: position.marginUsed.asCurrency)
-                InfoRow(label: "Leverage", value: "\(Int(position.leverage))x")
-                InfoRow(label: "Funding Fees", value: position.fundingFees.asCurrency)
-                InfoRow(label: "Opened", value: formatDate(position.openedAt))
+                PositionInfoRow(label: "Margin Used", value: position.marginUsed.asCurrency)
+                PositionInfoRow(label: "Leverage", value: "\(Int(position.leverage))x")
+                PositionInfoRow(label: "Funding Fees", value: position.fundingFees.asCurrency, labelOpacity: 0.5)
+                PositionInfoRow(label: "Opened", value: formatDate(position.openedAt), labelOpacity: 0.5)
             }
             .padding()
             .background(Color.backgroundSecondary)
@@ -249,20 +251,21 @@ struct TradeInfoSection: View {
 }
 
 // MARK: - Info Row
-struct InfoRow: View {
+private struct PositionInfoRow: View {
     let label: String
     let value: String
+    var labelOpacity: Double = 0.6
     
     var body: some View {
         HStack {
             Text(label)
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(labelOpacity))
             
             Spacer()
             
             Text(value)
                 .fontWeight(.medium)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
         }
     }
 }
@@ -275,14 +278,14 @@ struct TakeProfitStopLossInfoSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Risk Management")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             HStack(spacing: 16) {
                 if let tp = position.takeProfitPercent {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Take Profit")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textTertiary)
                         
                         Text("+\(tp)%")
                             .font(.headline)
@@ -298,7 +301,7 @@ struct TakeProfitStopLossInfoSection: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Stop Loss")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textTertiary)
                         
                         Text("-\(sl)%")
                             .font(.headline)
@@ -322,23 +325,18 @@ struct ClosePositionBar: View {
     var body: some View {
         VStack(spacing: 0) {
             Divider()
+                .background(Color.borderSubtle)
             
             PrimaryButton(
                 title: "Close Position",
                 isLoading: isLoading,
                 style: .destructive
             ) {
+                HapticManager.shared.warning()
                 onClose()
             }
             .padding()
         }
         .background(Color.backgroundSecondary)
     }
-}
-
-#Preview {
-    PositionDetailView(
-        position: Position.sample,
-        viewModel: PositionsViewModel()
-    )
 }

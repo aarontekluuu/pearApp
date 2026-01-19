@@ -2,13 +2,19 @@ import SwiftUI
 
 // MARK: - Basket Builder View
 struct BasketBuilderView: View {
-    @StateObject private var viewModel = BasketBuilderViewModel()
+    @ObservedObject private var viewModel = BasketBuilderViewModel.shared
     
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .top) {
                 Color.backgroundPrimary
                     .ignoresSafeArea()
+                    .onTapGesture {
+                        dismissKeyboard()
+                    }
+                
+                // Top gradient header
+                TopGradientHeader()
                 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -39,19 +45,22 @@ struct BasketBuilderView: View {
                             TradeSummaryCard(viewModel: viewModel)
                         }
                         
+                        // Add bottom padding to account for fixed CTA bar
                         Spacer(minLength: 100)
+                            .frame(height: 100)
                     }
                     .padding()
                 }
+                .scrollDismissesKeyboard(.interactively)
                 
-                // Bottom Execute Button
+                // Bottom Execute Button - Fixed at bottom
                 VStack {
                     Spacer()
-                    
                     BottomExecuteBar(viewModel: viewModel)
                 }
+                .ignoresSafeArea(edges: .bottom)
             }
-            .navigationTitle("Build Basket")
+            .navigationTitle("Trade")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -59,6 +68,16 @@ struct BasketBuilderView: View {
                         viewModel.resetBasket()
                     }
                     .foregroundColor(.secondary)
+                }
+                
+                ToolbarItem(placement: .keyboard) {
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            dismissKeyboard()
+                        }
+                        .foregroundColor(.pearPrimary)
+                    }
                 }
             }
             .sheet(isPresented: $viewModel.showAssetSearch) {
@@ -78,6 +97,10 @@ struct BasketBuilderView: View {
             }
         }
     }
+    
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
 }
 
 // MARK: - Basket Name Section
@@ -88,7 +111,7 @@ struct BasketNameSection: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Basket Name (Optional)")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.textTertiary)
             
             TextField("e.g., BTC/ETH Ratio Play", text: $name)
                 .textFieldStyle(PearTextFieldStyle())
@@ -105,11 +128,12 @@ struct AssetsSection: View {
             HStack {
                 Text("Assets")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(.textPrimary)
                 
                 Spacer()
                 
                 Button(action: {
+                    HapticManager.shared.tap()
                     viewModel.showAssetSearch = true
                 }) {
                     HStack(spacing: 4) {
@@ -150,15 +174,18 @@ struct EmptyAssetsCard: View {
     let onAdd: () -> Void
     
     var body: some View {
-        Button(action: onAdd) {
+        Button(action: {
+            HapticManager.shared.tap()
+            onAdd()
+        }) {
             VStack(spacing: 16) {
                 Image(systemName: "plus.circle.dashed")
                     .font(.system(size: 40))
-                    .foregroundColor(.pearPrimary)
+                    .foregroundColor(.pearPrimary.opacity(0.8))
                 
                 Text("Add assets to your basket")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
@@ -166,7 +193,7 @@ struct EmptyAssetsCard: View {
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.pearPrimary.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8]))
+                    .stroke(Color.pearPrimary.opacity(0.2), style: StrokeStyle(lineWidth: 2, dash: [8]))
             )
         }
     }
@@ -185,25 +212,31 @@ struct BasketLegCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(leg.asset.ticker)
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(.textPrimary)
                 
                 Text(leg.asset.formattedPrice)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
             }
             
             Spacer()
             
-            DirectionBadge(direction: leg.direction, onTap: onToggleDirection)
+            DirectionBadge(direction: leg.direction, onTap: {
+                HapticManager.shared.toggle()
+                onToggleDirection()
+            })
             
             Text(leg.formattedWeight)
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
                 .frame(width: 50, alignment: .trailing)
             
-            Button(action: onRemove) {
+            Button(action: {
+                HapticManager.shared.delete()
+                onRemove()
+            }) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.iconTertiary)
             }
         }
         .padding()
@@ -221,11 +254,12 @@ struct WeightSection: View {
             HStack {
                 Text("Weight Distribution")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(.textPrimary)
                 
                 Spacer()
                 
                 Button("Equalize") {
+                    HapticManager.shared.tap()
                     viewModel.equalizeWeights()
                 }
                 .font(.subheadline)
@@ -259,41 +293,155 @@ struct WeightSection: View {
 // MARK: - Position Size Section
 struct PositionSizeSection: View {
     @ObservedObject var viewModel: BasketBuilderViewModel
+    @StateObject private var walletService = WalletService.shared
+    @State private var usePercentage = false
+    @State private var percentageValue: Double = 25
+    @FocusState private var isTextFieldFocused: Bool
+    
+    private var availableUSDC: Double {
+        walletService.walletInfo?.usdcBalance ?? 0
+    }
+    
+    private var calculatedAmount: Double {
+        if usePercentage {
+            return availableUSDC * (percentageValue / 100)
+        }
+        return Double(viewModel.positionSize) ?? 0
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Position Size")
-                .font(.headline)
-                .foregroundColor(.white)
-            
-            HStack(spacing: 12) {
-                Text("$")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
+            HStack {
+                Text("Position Size")
+                    .font(.headline)
+                    .foregroundColor(.textPrimary)
                 
-                TextField("0.00", text: $viewModel.positionSize)
-                    .font(.title2)
-                    .keyboardType(.decimalPad)
-                    .foregroundColor(.white)
+                Spacer()
+                
+                // Toggle between $ and %
+                HStack(spacing: 4) {
+                    Text("$")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(!usePercentage ? .pearPrimary : .textTertiary)
+                    
+                    Toggle("", isOn: $usePercentage)
+                        .toggleStyle(SwitchToggleStyle(tint: .pearPrimary))
+                        .labelsHidden()
+                        .scaleEffect(0.8)
+                        .onChange(of: usePercentage) { _, newValue in
+                            HapticManager.shared.toggle()
+                            if newValue {
+                                // Calculate percentage from current amount
+                                if let amount = Double(viewModel.positionSize), availableUSDC > 0 {
+                                    percentageValue = min(100, (amount / availableUSDC) * 100)
+                                }
+                            } else {
+                                // Set amount from percentage
+                                viewModel.positionSize = String(format: "%.2f", calculatedAmount)
+                            }
+                        }
+                    
+                    Text("%")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(usePercentage ? .pearPrimary : .textTertiary)
+                }
             }
-            .padding()
-            .background(Color.backgroundSecondary)
-            .cornerRadius(12)
             
-            // Quick amount buttons
-            HStack(spacing: 8) {
-                ForEach([100, 500, 1000, 5000], id: \.self) { amount in
-                    Button(action: {
-                        viewModel.positionSize = "\(amount)"
-                    }) {
-                        Text("$\(amount)")
+            if usePercentage {
+                // Percentage slider
+                VStack(spacing: 16) {
+                    HStack {
+                        Text("\(Int(percentageValue))%")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.textPrimary)
+                        
+                        Spacer()
+                        
+                        Text(calculatedAmount.asCurrency)
+                            .font(.title3)
+                            .foregroundColor(.textSecondary)
+                    }
+                    
+                    Slider(value: $percentageValue, in: 1...100, step: 1)
+                        .tint(.pearPrimary)
+                        .onChange(of: percentageValue) { _, newValue in
+                            viewModel.positionSize = String(format: "%.2f", availableUSDC * (newValue / 100))
+                        }
+                    
+                    // Quick percentage buttons
+                    HStack(spacing: 8) {
+                        ForEach([25, 50, 75, 100], id: \.self) { percent in
+                            Button(action: {
+                                HapticManager.shared.selection()
+                                percentageValue = Double(percent)
+                                viewModel.positionSize = String(format: "%.2f", availableUSDC * (Double(percent) / 100))
+                            }) {
+                                Text("\(percent)%")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Int(percentageValue) == percent ? Color.pearPrimary.opacity(0.2) : Color.backgroundSecondary)
+                                    .foregroundColor(Int(percentageValue) == percent ? .pearPrimary : .textSecondary)
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                    
+                    // Available balance info
+                    HStack {
+                        Text("Available:")
+                            .font(.caption)
+                            .foregroundColor(.textTertiary)
+                        Text(availableUSDC.asCurrency)
                             .font(.caption)
                             .fontWeight(.medium)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.backgroundSecondary)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
+                            .foregroundColor(.textSecondary)
+                    }
+                }
+                .padding()
+                .background(Color.backgroundSecondary)
+                .cornerRadius(12)
+            } else {
+                // Dollar amount input
+                HStack(spacing: 12) {
+                    Text("$")
+                        .font(.title2)
+                        .foregroundColor(.textTertiary)
+                    
+                    TextField("0.00", text: $viewModel.positionSize)
+                        .font(.title2)
+                        .keyboardType(.decimalPad)
+                        .foregroundColor(.textPrimary)
+                        .focused($isTextFieldFocused)
+                }
+                .padding()
+                .background(Color.backgroundSecondary)
+                .cornerRadius(12)
+                .onTapGesture {
+                    isTextFieldFocused = true
+                }
+                
+                // Quick amount buttons
+                HStack(spacing: 8) {
+                    ForEach([100, 500, 1000, 5000], id: \.self) { amount in
+                        Button(action: {
+                            HapticManager.shared.selection()
+                            viewModel.positionSize = "\(amount)"
+                            isTextFieldFocused = false
+                        }) {
+                            Text("$\(amount)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.backgroundSecondary)
+                                .foregroundColor(.textSecondary)
+                                .cornerRadius(8)
+                        }
                     }
                 }
             }
@@ -309,6 +457,7 @@ struct TakeProfitStopLossSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button(action: {
+                HapticManager.shared.toggle()
                 withAnimation {
                     isExpanded.toggle()
                 }
@@ -316,16 +465,17 @@ struct TakeProfitStopLossSection: View {
                 HStack {
                     Text("Take Profit / Stop Loss")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                     
                     Text("Optional")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textQuaternary)
                     
                     Spacer()
                     
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.iconTertiary)
                 }
             }
             
@@ -334,7 +484,7 @@ struct TakeProfitStopLossSection: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Take Profit %")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textTertiary)
                         
                         TextField("e.g., 10", text: $viewModel.takeProfitPercent)
                             .textFieldStyle(PearTextFieldStyle())
@@ -344,7 +494,7 @@ struct TakeProfitStopLossSection: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Stop Loss %")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textTertiary)
                         
                         TextField("e.g., 5", text: $viewModel.stopLossPercent)
                             .textFieldStyle(PearTextFieldStyle())
@@ -388,12 +538,12 @@ struct TradeSummaryCard: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Trade Summary")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 12) {
                 SummaryRowItem(label: "Position Size", value: viewModel.positionSizeValue.asCurrency)
                 SummaryRowItem(label: "Margin Required", value: viewModel.marginRequired.asCurrency)
-                SummaryRowItem(label: "Estimated Fees", value: viewModel.estimatedFees.asCurrency)
+                SummaryRowItem(label: "Estimated Fees", value: viewModel.estimatedFees.asCurrency, labelOpacity: 0.5)
                 
                 if let tp = Double(viewModel.takeProfitPercent), tp > 0 {
                     SummaryRowItem(label: "Take Profit", value: "+\(tp)%", valueColor: .pearProfit)
@@ -414,12 +564,13 @@ struct TradeSummaryCard: View {
 struct SummaryRowItem: View {
     let label: String
     let value: String
-    var valueColor: Color = .white
+    var valueColor: Color = .textPrimary
+    var labelOpacity: Double = 0.6
     
     var body: some View {
         HStack {
             Text(label)
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(labelOpacity))
             
             Spacer()
             
@@ -437,6 +588,7 @@ struct BottomExecuteBar: View {
     var body: some View {
         VStack(spacing: 0) {
             Divider()
+                .background(Color.divider)
             
             PrimaryButton(
                 title: "Review Trade",
@@ -444,9 +596,14 @@ struct BottomExecuteBar: View {
             ) {
                 viewModel.prepareTrade()
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
         }
-        .background(Color.backgroundSecondary)
+        .background(
+            Color.backgroundSecondary
+                .ignoresSafeArea(edges: .bottom)
+        )
     }
 }
 
@@ -459,8 +616,4 @@ struct PearTextFieldStyle: TextFieldStyle {
             .foregroundColor(.white)
             .cornerRadius(12)
     }
-}
-
-#Preview {
-    BasketBuilderView()
 }

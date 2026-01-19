@@ -14,7 +14,7 @@ struct TradeReviewView: View {
                 Color.backgroundPrimary
                     .ignoresSafeArea()
                 
-                VStack(spacing: 24) {
+                VStack(spacing: 0) {
                     ScrollView {
                         VStack(spacing: 24) {
                             // Header
@@ -30,19 +30,28 @@ struct TradeReviewView: View {
                             TradeWarningsSection()
                         }
                         .padding()
+                        .padding(.bottom, 100) // Extra padding for button
                     }
                     
-                    // Swipe to Confirm
-                    SwipeToConfirmButton(
-                        title: "Swipe to Execute",
-                        isLoading: viewModel.isExecuting,
-                        onConfirm: {
-                            Task {
-                                await viewModel.executeTrade()
+                    // Swipe to Confirm - Fixed at bottom
+                    VStack(spacing: 0) {
+                        Divider()
+                            .background(Color.divider)
+                        
+                        SwipeToConfirmButton(
+                            title: "Swipe to Execute",
+                            isLoading: viewModel.isExecuting,
+                            onConfirm: {
+                                Task {
+                                    await viewModel.executeTrade()
+                                }
                             }
-                        }
-                    )
-                    .padding()
+                        )
+                        .padding(.horizontal)
+                        .padding(.top, 12)
+                        .padding(.bottom, 34) // 16pt padding + 18pt for tab bar clearance
+                    }
+                    .background(Color.backgroundPrimary)
                 }
             }
             .navigationTitle("Review Trade")
@@ -57,6 +66,8 @@ struct TradeReviewView: View {
             }
         }
         .interactiveDismissDisabled(viewModel.isExecuting)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -66,9 +77,10 @@ struct TradeReviewHeader: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "leaf.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.primaryGradient)
+            Image("pear")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 48, height: 48)
             
             Text(basket.displayName)
                 .font(.title2)
@@ -91,7 +103,7 @@ struct TradeReviewLegsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Basket Composition")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 8) {
                 ForEach(legs) { leg in
@@ -102,11 +114,11 @@ struct TradeReviewLegsSection: View {
                             Text(leg.asset.ticker)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                                .foregroundColor(.white)
+                                .foregroundColor(.textPrimary)
                             
                             Text(leg.asset.formattedPrice)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.textTertiary)
                         }
                         
                         Spacer()
@@ -115,13 +127,14 @@ struct TradeReviewLegsSection: View {
                         
                         Text(leg.formattedWeight)
                             .font(.subheadline)
-                            .foregroundColor(.white)
+                            .foregroundColor(.textSecondary)
                             .frame(width: 50, alignment: .trailing)
                     }
                     .padding(.vertical, 8)
                     
                     if leg.id != legs.last?.id {
                         Divider()
+                            .background(Color.borderSubtle)
                     }
                 }
             }
@@ -140,19 +153,21 @@ struct TradeReviewDetailsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Trade Details")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 16) {
                 DetailRow(label: "Position Size", value: viewModel.positionSizeValue.asCurrency)
                 DetailRow(label: "Margin Required", value: viewModel.marginRequired.asCurrency)
                 
                 Divider()
+                    .background(Color.borderSubtle)
                 
-                DetailRow(label: "Trading Fee", value: "~\(viewModel.estimatedFees.asCurrency)")
-                DetailRow(label: "Network", value: "Arbitrum")
+                DetailRow(label: "Trading Fee", value: "~\(viewModel.estimatedFees.asCurrency)", labelOpacity: 0.5)
+                DetailRow(label: "Network", value: "Arbitrum", labelOpacity: 0.5)
                 
                 if let tp = viewModel.basket.takeProfitPercent {
                     Divider()
+                        .background(Color.borderSubtle)
                     DetailRow(
                         label: "Take Profit",
                         value: "+\(tp)%",
@@ -179,12 +194,13 @@ struct TradeReviewDetailsSection: View {
 struct DetailRow: View {
     let label: String
     let value: String
-    var valueColor: Color = .white
+    var valueColor: Color = .textPrimary
+    var labelOpacity: Double = 0.6
     
     var body: some View {
         HStack {
             Text(label)
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(labelOpacity))
             
             Spacer()
             
@@ -201,20 +217,20 @@ struct TradeWarningsSection: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.pearWarning.opacity(0.8))
                 
                 Text("Trading perpetual futures involves significant risk")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
             }
             
             HStack(spacing: 8) {
                 Image(systemName: "info.circle.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(.blue.opacity(0.7))
                 
                 Text("Prices are subject to slippage during execution")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
             }
         }
         .padding()
@@ -231,6 +247,7 @@ struct SwipeToConfirmButton: View {
     
     @State private var offset: CGFloat = 0
     @State private var width: CGFloat = 0
+    @State private var lastTickProgress: CGFloat = 0
     
     private let threshold: CGFloat = 0.7
     
@@ -283,16 +300,25 @@ struct SwipeToConfirmButton: View {
                                 .onChanged { value in
                                     let newOffset = max(0, min(value.translation.width, width - 60))
                                     offset = newOffset
+                                    
+                                    // Haptic feedback at progress milestones
+                                    let currentProgress = min(1, max(0, newOffset / (width * threshold)))
+                                    if currentProgress - lastTickProgress > 0.25 {
+                                        HapticManager.shared.sliderTick()
+                                        lastTickProgress = currentProgress
+                                    }
                                 }
                                 .onEnded { _ in
                                     if progress >= 1 {
-                                        triggerSuccessHaptic()
+                                        HapticManager.shared.swipeComplete()
                                         onConfirm()
                                     } else {
+                                        HapticManager.shared.softTap()
                                         withAnimation(.spring()) {
                                             offset = 0
                                         }
                                     }
+                                    lastTickProgress = 0
                                 }
                         )
                         .padding(4)
@@ -305,11 +331,6 @@ struct SwipeToConfirmButton: View {
         }
         .frame(height: 60)
         .disabled(isLoading)
-    }
-    
-    private func triggerSuccessHaptic() {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
     }
 }
 
@@ -330,30 +351,30 @@ struct TradeExecutionSuccessView: View {
                 Text("Trade Executed!")
                     .font(.title)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundColor(.textPrimary)
                 
                 Text("Your basket position is now open")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
             }
             
             // Order details
             VStack(spacing: 12) {
                 HStack {
                     Text("Order ID")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                     Spacer()
                     Text(response.orderId.truncatedTxHash)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.white)
+                        .foregroundColor(.textSecondary)
                 }
                 
                 HStack {
                     Text("Total Fees")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                     Spacer()
                     Text(response.totalFees.asCurrency)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                 }
             }
             .padding()
@@ -368,13 +389,8 @@ struct TradeExecutionSuccessView: View {
         }
         .padding()
         .background(Color.backgroundPrimary)
+        .onAppear {
+            HapticManager.shared.tradeSuccess()
+        }
     }
-}
-
-#Preview {
-    let viewModel = BasketBuilderViewModel()
-    viewModel.basket = Basket.sample
-    viewModel.positionSize = "1000"
-    
-    return TradeReviewView(viewModel: viewModel)
 }

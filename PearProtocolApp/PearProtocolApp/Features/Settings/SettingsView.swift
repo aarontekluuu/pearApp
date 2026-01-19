@@ -8,9 +8,12 @@ struct SettingsView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .top) {
                 Color.backgroundPrimary
                     .ignoresSafeArea()
+                
+                // Top gradient header
+                TopGradientHeader()
                 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -22,9 +25,6 @@ struct SettingsView: View {
                         
                         // Agent Wallet Section
                         AgentWalletSection(repository: walletRepository)
-                        
-                        // Builder Fee Section
-                        BuilderFeeSection(repository: walletRepository)
                         
                         // App Settings
                         AppSettingsSection()
@@ -43,7 +43,7 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Disconnect", role: .destructive) {
                     Task {
-                        await walletService.disconnect()
+                        await walletService.clearAllConnections()
                     }
                 }
             } message: {
@@ -57,12 +57,13 @@ struct SettingsView: View {
 struct WalletSection: View {
     @ObservedObject var walletService: WalletService
     @Binding var showDisconnectConfirmation: Bool
+    @State private var showBalancesModal = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Connected Wallet")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 16) {
                 if walletService.isConnected, let address = walletService.connectedAddress {
@@ -77,56 +78,51 @@ struct WalletSection: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Address")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.textTertiary)
                             
                             Text(address.truncatedAddress)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                                .foregroundColor(.white)
+                                .foregroundColor(.textPrimary)
                         }
                         
                         Spacer()
                         
                         Button(action: {
                             UIPasteboard.general.string = address
-                            triggerHaptic()
+                            HapticManager.shared.copy()
                         }) {
                             Image(systemName: "doc.on.doc")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    if let walletInfo = walletService.walletInfo {
-                        Divider()
-                        
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("ETH Balance")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                
-                                Text(walletInfo.formattedEthBalance)
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-                            }
-                            
-                            Spacer()
-                            
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text("USDC Balance")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                
-                                Text(walletInfo.formattedUsdcBalance)
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-                            }
+                                .foregroundColor(.iconSecondary)
                         }
                     }
                     
                     Divider()
+                        .background(Color.borderSubtle)
+                    
+                    // Balances Button
+                    Button(action: {
+                        HapticManager.shared.tap()
+                        showBalancesModal = true
+                    }) {
+                        HStack {
+                            Image(systemName: "dollarsign.circle.fill")
+                                .foregroundColor(.pearPrimary)
+                            Text("View Balances")
+                                .foregroundColor(.textPrimary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.iconTertiary)
+                        }
+                        .font(.subheadline)
+                    }
+                    
+                    Divider()
+                        .background(Color.borderSubtle)
                     
                     Button(action: {
+                        HapticManager.shared.tap()
                         showDisconnectConfirmation = true
                     }) {
                         HStack {
@@ -139,11 +135,11 @@ struct WalletSection: View {
                 } else {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.pearWarning)
                         
                         Text("Wallet not connected")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textSecondary)
                     }
                 }
             }
@@ -151,23 +147,100 @@ struct WalletSection: View {
             .background(Color.backgroundSecondary)
             .cornerRadius(16)
         }
+        .sheet(isPresented: $showBalancesModal) {
+            BalancesModalView(walletService: walletService)
+        }
     }
+}
+
+// MARK: - Balances Modal View
+struct BalancesModalView: View {
+    @ObservedObject var walletService: WalletService
+    @Environment(\.dismiss) var dismiss
     
-    private func triggerHaptic() {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.backgroundPrimary
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    // USDC Balance Card
+                    VStack(spacing: 16) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.blue.opacity(0.15))
+                                    .frame(width: 56, height: 56)
+                                
+                                Text("$")
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.blue)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("USDC")
+                                    .font(.headline)
+                                    .foregroundColor(.textPrimary)
+                                
+                                Text("USD Coin")
+                                    .font(.caption)
+                                    .foregroundColor(.textTertiary)
+                            }
+                            
+                            Spacer()
+                        }
+                        
+                        Divider()
+                            .background(Color.borderSubtle)
+                        
+                        HStack {
+                            Text("Available Balance")
+                                .font(.subheadline)
+                                .foregroundColor(.textTertiary)
+                            
+                            Spacer()
+                            
+                            Text(walletService.walletInfo?.formattedUsdcBalance ?? "$0.00")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.textPrimary)
+                        }
+                    }
+                    .padding()
+                    .background(Color.backgroundSecondary)
+                    .cornerRadius(16)
+                    
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationTitle("Balances")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.pearPrimary)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }
 
 // MARK: - Agent Wallet Section
 struct AgentWalletSection: View {
     @ObservedObject var repository: WalletRepository
+    @State private var isRefreshing = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Wallet")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 16) {
                 if let agentWallet = repository.agentWallet {
@@ -182,12 +255,12 @@ struct AgentWalletSection: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Agent Address")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.textTertiary)
                             
                             Text(agentWallet.truncatedAddress)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                                .foregroundColor(.white)
+                                .foregroundColor(.textPrimary)
                         }
                         
                         Spacer()
@@ -199,82 +272,54 @@ struct AgentWalletSection: View {
                     }
                     
                     Divider()
+                        .background(Color.borderSubtle)
                     
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Expires")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.textTertiary)
                             
                             Text(agentWallet.formattedExpiry)
                                 .font(.subheadline)
-                                .foregroundColor(agentWallet.needsRefresh ? .yellow : .white)
+                                .foregroundColor(agentWallet.needsRefresh ? .pearWarning : .textPrimary)
                         }
                         
                         Spacer()
                         
                         if agentWallet.needsRefresh {
                             Button(action: {
-                                // Refresh agent wallet
+                                HapticManager.shared.tap()
+                                Task {
+                                    isRefreshing = true
+                                    await repository.checkAgentWalletStatus()
+                                    isRefreshing = false
+                                    HapticManager.shared.success()
+                                }
                             }) {
-                                Text("Refresh")
-                                    .font(.subheadline)
-                                    .foregroundColor(.pearPrimary)
+                                HStack(spacing: 4) {
+                                    if isRefreshing {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                    }
+                                    Text("Refresh")
+                                        .font(.subheadline)
+                                        .foregroundColor(.pearPrimary)
+                                }
                             }
+                            .disabled(isRefreshing)
                         }
                     }
                 } else {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.pearWarning)
                         
                         Text("Agent wallet not configured")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textSecondary)
                     }
                 }
-            }
-            .padding()
-            .background(Color.backgroundSecondary)
-            .cornerRadius(16)
-        }
-    }
-}
-
-// MARK: - Builder Fee Section
-struct BuilderFeeSection: View {
-    @ObservedObject var repository: WalletRepository
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Builder Fee")
-                .font(.headline)
-                .foregroundColor(.white)
-            
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.title2)
-                    .foregroundColor(repository.isBuilderApproved ? .pearProfit : .secondary)
-                    .frame(width: 44, height: 44)
-                    .background((repository.isBuilderApproved ? Color.pearProfit : Color.gray).opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Status")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text(repository.isBuilderApproved ? "Approved" : "Not Approved")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                }
-                
-                Spacer()
-                
-                Text("0.1% Fee")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
             .padding()
             .background(Color.backgroundSecondary)
@@ -302,8 +347,6 @@ struct StatusBadge: View {
 
 // MARK: - App Settings Section
 struct AppSettingsSection: View {
-    @AppStorage("hapticFeedback") private var hapticFeedback = true
-    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Preferences")
@@ -311,16 +354,24 @@ struct AppSettingsSection: View {
                 .foregroundColor(.white)
             
             VStack(spacing: 0) {
-                Toggle(isOn: $hapticFeedback) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "hand.tap.fill")
-                            .foregroundColor(.pearPrimary)
-                        
-                        Text("Haptic Feedback")
-                            .foregroundColor(.white)
-                    }
+                HStack(spacing: 12) {
+                    Image(systemName: "bell.fill")
+                        .foregroundColor(.pearPrimary)
+                        .frame(width: 24)
+                    
+                    Text("Notifications")
+                        .foregroundColor(.textPrimary)
+                    
+                    Spacer()
+                    
+                    Text("Enabled")
+                        .font(.subheadline)
+                        .foregroundColor(.textTertiary)
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.iconTertiary)
                 }
-                .tint(.pearPrimary)
                 .padding()
             }
             .background(Color.backgroundSecondary)
@@ -335,15 +386,15 @@ struct AboutSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("About")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.textPrimary)
             
             VStack(spacing: 0) {
-                AboutRow(icon: "doc.text", title: "Terms of Service")
-                Divider().padding(.leading, 56)
-                AboutRow(icon: "hand.raised", title: "Privacy Policy")
-                Divider().padding(.leading, 56)
-                AboutRow(icon: "questionmark.circle", title: "Help & Support")
-                Divider().padding(.leading, 56)
+                AboutRow(icon: "doc.text", title: "Terms of Service", url: "https://pearprotocol.io/terms")
+                Divider().background(Color.borderSubtle).padding(.leading, 56)
+                AboutRow(icon: "hand.raised", title: "Privacy Policy", url: "https://pearprotocol.io/privacy")
+                Divider().background(Color.borderSubtle).padding(.leading, 56)
+                AboutRow(icon: "questionmark.circle", title: "Help & Support", url: "https://pearprotocol.io/help")
+                Divider().background(Color.borderSubtle).padding(.leading, 56)
                 
                 HStack(spacing: 12) {
                     Image(systemName: "info.circle")
@@ -351,12 +402,12 @@ struct AboutSection: View {
                         .frame(width: 24)
                     
                     Text("Version")
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                     
                     Spacer()
                     
                     Text("1.0.0")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                 }
                 .padding()
             }
@@ -370,27 +421,36 @@ struct AboutSection: View {
 struct AboutRow: View {
     let icon: String
     let title: String
+    let url: String?
+    
+    init(icon: String, title: String, url: String? = nil) {
+        self.icon = icon
+        self.title = title
+        self.url = url
+    }
     
     var body: some View {
-        Button(action: {}) {
+        Button(action: {
+            HapticManager.shared.lightTap()
+            if let urlString = url, let url = URL(string: urlString) {
+                UIApplication.shared.open(url)
+            }
+        }) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .foregroundColor(.pearPrimary)
                     .frame(width: 24)
                 
                 Text(title)
-                    .foregroundColor(.white)
+                    .foregroundColor(.textPrimary)
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.iconTertiary)
             }
             .padding()
         }
     }
-}
-
-#Preview {
-    SettingsView()
 }

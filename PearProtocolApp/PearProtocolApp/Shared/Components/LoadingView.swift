@@ -6,14 +6,14 @@ struct LoadingView: View {
     var showBackground: Bool = true
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Constants.UI.spacingMD) {
             ProgressView()
                 .progressViewStyle(CircularProgressViewStyle(tint: .pearPrimary))
                 .scaleEffect(1.2)
             
             Text(message)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(showBackground ? Color.backgroundPrimary : Color.clear)
@@ -28,21 +28,21 @@ struct LoadingOverlay: View {
     var body: some View {
         if isLoading {
             ZStack {
-                Color.black.opacity(0.5)
+                Color.black.opacity(0.6)
                     .ignoresSafeArea()
                 
-                VStack(spacing: 16) {
+                VStack(spacing: Constants.UI.spacingMD) {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .pearPrimary))
                         .scaleEffect(1.5)
                     
                     Text(message)
-                        .font(.subheadline)
-                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(.textPrimary)
                 }
-                .padding(32)
+                .padding(Constants.UI.spacingXL)
                 .background(Color.backgroundSecondary)
-                .cornerRadius(16)
+                .cornerRadius(Constants.UI.cornerRadiusLarge)
             }
             .transition(.opacity)
         }
@@ -56,9 +56,9 @@ struct ShimmerView: View {
     var body: some View {
         LinearGradient(
             colors: [
-                Color.gray.opacity(0.3),
-                Color.gray.opacity(0.1),
-                Color.gray.opacity(0.3)
+                Color.backgroundSecondary.opacity(0.4),
+                Color.backgroundTertiary.opacity(0.2),
+                Color.backgroundSecondary.opacity(0.4)
             ],
             startPoint: .leading,
             endPoint: .trailing
@@ -79,67 +79,76 @@ struct ShimmerView: View {
 // MARK: - Skeleton Row
 struct SkeletonRow: View {
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.UI.spacingSM + 4) {
             Circle()
-                .fill(Color.gray.opacity(0.2))
-                .frame(width: 44, height: 44)
+                .fill(Color.backgroundTertiary)
+                .frame(width: Constants.UI.iconSizeLarge, height: Constants.UI.iconSizeLarge)
             
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Constants.UI.spacingSM) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
+                    .fill(Color.backgroundTertiary)
                     .frame(width: 100, height: 16)
                 
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
+                    .fill(Color.backgroundTertiary)
                     .frame(width: 60, height: 12)
             }
             
             Spacer()
             
-            VStack(alignment: .trailing, spacing: 8) {
+            VStack(alignment: .trailing, spacing: Constants.UI.spacingSM) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
+                    .fill(Color.backgroundTertiary)
                     .frame(width: 80, height: 16)
                 
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.gray.opacity(0.2))
+                    .fill(Color.backgroundTertiary)
                     .frame(width: 50, height: 12)
             }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, Constants.UI.spacingSM + 4)
         .overlay(ShimmerView())
         .clipped()
+    }
+}
+
+// MARK: - Pulsing Loader
+struct PulsingLoader: View {
+    @State private var isAnimating = false
+    var color: Color = .pearPrimary
+    var size: CGFloat = 12
+    
+    var body: some View {
+        HStack(spacing: size * 0.5) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(color)
+                    .frame(width: size, height: size)
+                    .scaleEffect(isAnimating ? 1.0 : 0.5)
+                    .animation(
+                        Animation.easeInOut(duration: 0.6)
+                            .repeatForever()
+                            .delay(Double(index) * 0.2),
+                        value: isAnimating
+                    )
+            }
+        }
+        .onAppear {
+            isAnimating = true
+        }
     }
 }
 
 // MARK: - Pull to Refresh Indicator
 struct RefreshIndicator: View {
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Constants.UI.spacingSM) {
             ProgressView()
                 .progressViewStyle(CircularProgressViewStyle(tint: .pearPrimary))
             
             Text("Refreshing...")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.textSecondary)
         }
     }
-}
-
-#Preview {
-    VStack(spacing: 24) {
-        LoadingView()
-            .frame(height: 200)
-        
-        VStack(spacing: 0) {
-            ForEach(0..<3, id: \.self) { _ in
-                SkeletonRow()
-            }
-        }
-        .padding()
-        .background(Color.backgroundSecondary)
-        .cornerRadius(12)
-    }
-    .padding()
-    .background(Color.backgroundPrimary)
 }

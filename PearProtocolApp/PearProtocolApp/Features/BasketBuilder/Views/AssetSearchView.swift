@@ -231,9 +231,3 @@ struct QuickAssetChip: View {
         }
     }
 }
-
-#Preview {
-    AssetSearchView { assets in
-        print("Selected: \(assets.map { $0.ticker })")
-    }
-}

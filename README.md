@@ -109,18 +109,22 @@ PearProtocolApp/
 ## API Integration
 
 ### Base URL
-- Mainnet: `https://api.pearprotocol.io`
-- WebSocket: `wss://api.pearprotocol.io/ws`
+- Mainnet (Production): `https://hl-v2.pearprotocol.io` (Pear Protocol Hyperliquid V2)
+- WebSocket: `wss://hl-v2.pearprotocol.io/ws`
+
+**Note**: This connects to Hyperliquid mainnet (`https://api.hyperliquid.xyz`) via Pear Protocol's abstraction layer.
 
 ### Key Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/agentWallet` | GET/POST | Agent wallet management |
-| `/activeAssets` | GET | List tradeable markets |
-| `/trade/execute` | POST | Execute basket trade |
+| `/agent-wallet` | GET/POST | Agent wallet management |
+| `/assets` | GET | List tradeable markets |
+| `/positions` | POST | Execute basket trade (create position) |
 | `/positions` | GET | Fetch active positions |
-| `/trade/close` | POST | Close position |
+| `/positions/{id}/close` | POST | Close position |
+| `/positions/history` | GET | Trade history |
+| `/auth/login` | POST | Authenticate with wallet signature |
 
 ### Authentication
 ```

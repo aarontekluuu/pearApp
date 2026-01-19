@@ -141,7 +141,7 @@ struct Basket: Identifiable, Codable {
 /// Represents a single leg/component of a basket trade
 struct BasketLeg: Identifiable, Codable, Hashable {
     let id: UUID
-    let asset: Asset
+    var asset: Asset
     var direction: TradeDirection
     var weight: Double // Percentage (0-100)
     
@@ -199,20 +199,4 @@ enum TradeDirection: String, Codable, CaseIterable {
     var opposite: TradeDirection {
         self == .long ? .short : .long
     }
-}
-
-// MARK: - Sample Data
-extension Basket {
-    static let sample = Basket(
-        name: "BTC/ETH Pair",
-        legs: [
-            BasketLeg(asset: Asset.sampleAssets[0], direction: .long, weight: 50),
-            BasketLeg(asset: Asset.sampleAssets[1], direction: .short, weight: 50)
-        ],
-        totalSize: 1000,
-        takeProfitPercent: 10,
-        stopLossPercent: 5
-    )
-    
-    static let empty = Basket()
 }

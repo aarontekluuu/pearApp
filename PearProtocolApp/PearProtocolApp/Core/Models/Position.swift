@@ -143,134 +143,73 @@ enum PositionStatus: String, Codable {
     }
 }
 
-// MARK: - Sample Data
-extension Position {
-    static let sample = Position(
-        id: "pos_001",
-        basketId: "basket_001",
-        basketName: "BTC/ETH Pair",
-        legs: [
-            PositionLeg(
-                id: "leg_001",
-                assetId: "BTC",
-                assetTicker: "BTC",
-                direction: .long,
-                size: 500,
-                entryPrice: 43000,
-                currentPrice: 43250,
-                unrealizedPnL: 12.50,
-                unrealizedPnLPercent: 2.5,
-                weight: 50
-            ),
-            PositionLeg(
-                id: "leg_002",
-                assetId: "ETH",
-                assetTicker: "ETH",
-                direction: .short,
-                size: 500,
-                entryPrice: 2300,
-                currentPrice: 2285,
-                unrealizedPnL: 7.50,
-                unrealizedPnLPercent: 1.5,
-                weight: 50
-            )
-        ],
-        entryValue: 1000,
-        currentValue: 1020,
-        unrealizedPnL: 20,
-        unrealizedPnLPercent: 2.0,
-        realizedPnL: 0,
-        marginUsed: 100,
-        leverage: 10,
-        takeProfitPercent: 10,
-        stopLossPercent: 5,
-        fundingFees: 0.50,
-        status: .open,
-        openedAt: Date().addingTimeInterval(-3600 * 4) // 4 hours ago
-    )
-    
-    static let samplePositions: [Position] = [
-        sample,
-        Position(
-            id: "pos_002",
-            basketId: "basket_002",
-            basketName: "SOL Long",
-            legs: [
-                PositionLeg(
-                    id: "leg_003",
-                    assetId: "SOL",
-                    assetTicker: "SOL",
-                    direction: .long,
-                    size: 500,
-                    entryPrice: 95.00,
-                    currentPrice: 98.45,
-                    unrealizedPnL: 18.15,
-                    unrealizedPnLPercent: 3.63,
-                    weight: 100
-                )
-            ],
-            entryValue: 500,
-            currentValue: 518.15,
-            unrealizedPnL: 18.15,
-            unrealizedPnLPercent: 3.63,
-            realizedPnL: 0,
-            marginUsed: 50,
-            leverage: 10,
-            takeProfitPercent: nil,
-            stopLossPercent: nil,
-            fundingFees: 0.25,
-            status: .open,
-            openedAt: Date().addingTimeInterval(-3600 * 12) // 12 hours ago
-        ),
-        Position(
-            id: "pos_003",
-            basketId: "basket_003",
-            basketName: "NVDA/TSLA Tech",
-            legs: [
-                PositionLeg(
-                    id: "leg_004",
-                    assetId: "NVDA",
-                    assetTicker: "NVDA",
-                    direction: .long,
-                    size: 300,
-                    entryPrice: 490,
-                    currentPrice: 485.20,
-                    unrealizedPnL: -2.94,
-                    unrealizedPnLPercent: -0.98,
-                    weight: 60
-                ),
-                PositionLeg(
-                    id: "leg_005",
-                    assetId: "TSLA",
-                    assetTicker: "TSLA",
-                    direction: .short,
-                    size: 200,
-                    entryPrice: 245,
-                    currentPrice: 248.90,
-                    unrealizedPnL: -3.18,
-                    unrealizedPnLPercent: -1.59,
-                    weight: 40
-                )
-            ],
-            entryValue: 500,
-            currentValue: 493.88,
-            unrealizedPnL: -6.12,
-            unrealizedPnLPercent: -1.22,
-            realizedPnL: 0,
-            marginUsed: 100,
-            leverage: 5,
-            takeProfitPercent: 15,
-            stopLossPercent: 8,
-            fundingFees: 0.35,
-            status: .open,
-            openedAt: Date().addingTimeInterval(-3600 * 24) // 24 hours ago
-        )
-    ]
-}
-
 // MARK: - API Response Models
 struct PositionsResponse: Codable {
     let positions: [Position]
     let totalUnrealizedPnL: Double
     let totalMarginUsed: Double
+}
+
+// MARK: - Close All Positions Request
+struct CloseAllPositionsRequest: Codable {
+    let agentWalletAddress: String
+}
+
+// MARK: - Adjust Position Request
+struct AdjustPositionRequest: Codable {
+    let agentWalletAddress: String
+    let sizeChange: Double // Positive to increase, negative to decrease
+    let slippage: Double?
+    
+    init(agentWalletAddress: String, sizeChange: Double, slippage: Double? = 0.5) {
+        self.agentWalletAddress = agentWalletAddress
+        self.sizeChange = sizeChange
+        self.slippage = slippage
+    }
+}
+
+// MARK: - Adjust Position Advanced Request
+struct AdjustPositionAdvancedRequest: Codable {
+    let agentWalletAddress: String
+    let targetSizes: [String: Double] // Asset ID -> target absolute size
+    let slippage: Double?
+    
+    init(agentWalletAddress: String, targetSizes: [String: Double], slippage: Double? = 0.5) {
+        self.agentWalletAddress = agentWalletAddress
+        self.targetSizes = targetSizes
+        self.slippage = slippage
+    }
+}
+
+// MARK: - Adjust Leverage Request
+struct AdjustLeverageRequest: Codable {
+    let agentWalletAddress: String
+    let leverage: Double
+    
+    init(agentWalletAddress: String, leverage: Double) {
+        self.agentWalletAddress = agentWalletAddress
+        self.leverage = leverage
+    }
+}
+
+// MARK: - Update Risk Parameters Request
+struct UpdateRiskParametersRequest: Codable {
+    let agentWalletAddress: String
+    let takeProfitPercent: Double?
+    let stopLossPercent: Double?
+    
+    init(agentWalletAddress: String, takeProfitPercent: Double? = nil, stopLossPercent: Double? = nil) {
+        self.agentWalletAddress = agentWalletAddress
+        self.takeProfitPercent = takeProfitPercent
+        self.stopLossPercent = stopLossPercent
+    }
+}
+
+// MARK: - Position Adjust Response
+struct PositionAdjustResponse: Codable {
+    let success: Bool
+    let positionId: String
+    let updatedPosition: Position?
+    let message: String?
+    let timestamp: Date
 }

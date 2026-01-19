@@ -9,23 +9,23 @@ struct WeightSlider: View {
     var showPercentage: Bool = true
     
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Constants.UI.spacingSM) {
             HStack {
                 Text(label)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.textSecondary)
                 
                 Spacer()
                 
                 if showPercentage {
                     Text(weight.asWeight)
-                        .font(.headline)
-                        .foregroundColor(.white)
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundColor(.textPrimary)
                         .monospacedDigit()
                 }
             }
             
-            HStack(spacing: 12) {
+            HStack(spacing: Constants.UI.spacingSM + 4) {
                 Slider(
                     value: $weight,
                     in: range,
@@ -34,7 +34,7 @@ struct WeightSlider: View {
                 .tint(.pearPrimary)
                 
                 // Quick buttons
-                HStack(spacing: 4) {
+                HStack(spacing: Constants.UI.spacingXS) {
                     QuickWeightButton(value: 25, currentWeight: $weight)
                     QuickWeightButton(value: 50, currentWeight: $weight)
                     QuickWeightButton(value: 100, currentWeight: $weight)
@@ -61,12 +61,12 @@ struct QuickWeightButton: View {
             }
         }) {
             Text("\(Int(value))%")
-                .font(.caption2)
+                .font(.system(size: 11, weight: .regular))
                 .fontWeight(.medium)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.pearPrimary : Color.backgroundSecondary)
-                .foregroundColor(isSelected ? .white : .secondary)
+                .padding(.horizontal, Constants.UI.spacingSM)
+                .padding(.vertical, Constants.UI.spacingXS + 2)
+                .background(isSelected ? Color.pearPrimary : Color.backgroundTertiary)
+                .foregroundColor(isSelected ? Color(hex: "080807") : .textSecondary)
                 .cornerRadius(6)
         }
     }
@@ -82,32 +82,32 @@ struct WeightDistributionView: View {
     let legs: [BasketLeg]
     
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Constants.UI.spacingSM + 4) {
             // Bar chart
             GeometryReader { geometry in
                 HStack(spacing: 2) {
                     ForEach(legs) { leg in
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 4)
                             .fill(Color.directionColor(isLong: leg.isLong))
                             .frame(width: max(4, geometry.size.width * (leg.weight / 100)))
                     }
                 }
             }
-            .frame(height: 8)
-            .background(Color.gray.opacity(0.2))
-            .cornerRadius(4)
+            .frame(height: 10)
+            .background(Color.backgroundTertiary)
+            .cornerRadius(5)
             
             // Legend
-            HStack(spacing: 16) {
+            HStack(spacing: Constants.UI.spacingMD) {
                 ForEach(legs) { leg in
-                    HStack(spacing: 6) {
+                    HStack(spacing: Constants.UI.spacingXS + 2) {
                         Circle()
                             .fill(Color.directionColor(isLong: leg.isLong))
                             .frame(width: 8, height: 8)
                         
                         Text("\(leg.asset.ticker) \(leg.formattedWeight)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.textSecondary)
                     }
                 }
             }
@@ -128,19 +128,19 @@ struct WeightEditor: View {
     }
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Constants.UI.spacingMD) {
             // Header
             HStack {
                 Text("Weights")
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(.textPrimary)
                 
                 Spacer()
                 
                 Button("Equalize") {
                     equalizeWeights()
                 }
-                .font(.subheadline)
+                .font(.system(size: 14, weight: .regular))
                 .foregroundColor(.pearPrimary)
             }
             
@@ -155,26 +155,27 @@ struct WeightEditor: View {
             // Total indicator
             HStack {
                 Text("Total")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(.textSecondary)
                 
                 Spacer()
                 
                 Text(totalWeight.asWeight)
-                    .font(.headline)
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundColor(isValid ? .pearProfit : .pearLoss)
             }
-            .padding()
+            .padding(Constants.UI.cardPadding)
             .background(Color.backgroundSecondary)
-            .cornerRadius(12)
+            .cornerRadius(Constants.UI.cornerRadius)
             
             if !isValid {
-                HStack(spacing: 8) {
+                HStack(spacing: Constants.UI.spacingSM) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.pearLoss)
+                        .font(.system(size: 14))
                     
                     Text("Weights must sum to 100%")
-                        .font(.caption)
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.pearLoss)
                 }
             }
@@ -212,7 +213,7 @@ struct LongShortToggle: View {
             )
         }
         .background(Color.backgroundSecondary)
-        .cornerRadius(12)
+        .cornerRadius(Constants.UI.cornerRadius)
     }
 }
 
@@ -227,16 +228,16 @@ struct DirectionOption: View {
             triggerHaptic()
             onSelect()
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: Constants.UI.spacingSM) {
                 Image(systemName: direction.icon)
+                    .font(.system(size: 14, weight: .medium))
                 Text(direction.displayName)
             }
-            .font(.subheadline)
-            .fontWeight(.medium)
+            .font(.system(size: 14, weight: .medium))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(isSelected ? Color.directionColor(isLong: direction == .long) : Color.clear)
-            .foregroundColor(isSelected ? .white : .secondary)
+            .padding(.vertical, Constants.UI.spacingSM + 4)
+            .background(isSelected ? Color.directionBackground(isLong: direction == .long) : Color.clear)
+            .foregroundColor(isSelected ? Color.directionColor(isLong: direction == .long) : .textSecondary)
         }
     }
     
@@ -244,19 +245,4 @@ struct DirectionOption: View {
         let generator = UISelectionFeedbackGenerator()
         generator.selectionChanged()
     }
-}
-
-#Preview {
-    VStack(spacing: 24) {
-        WeightSlider(weight: .constant(50), label: "BTC Weight")
-        
-        WeightDistributionView(legs: [
-            BasketLeg(asset: Asset.sampleAssets[0], direction: .long, weight: 60),
-            BasketLeg(asset: Asset.sampleAssets[1], direction: .short, weight: 40)
-        ])
-        
-        LongShortToggle(direction: .constant(.long))
-    }
-    .padding()
-    .background(Color.backgroundPrimary)
 }

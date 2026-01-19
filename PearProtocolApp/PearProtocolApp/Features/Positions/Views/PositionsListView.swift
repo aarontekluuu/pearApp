@@ -6,9 +6,12 @@ struct PositionsListView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .top) {
                 Color.backgroundPrimary
                     .ignoresSafeArea()
+                
+                // Top gradient header
+                TopGradientHeader()
                 
                 VStack(spacing: 0) {
                     // Portfolio Summary
@@ -91,11 +94,11 @@ struct PortfolioSummaryCard: View {
             VStack(spacing: 4) {
                 Text("Portfolio Value")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
                 
                 Text(viewModel.totalPortfolioValue.asCurrency)
                     .font(.system(size: 32, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.textPrimary)
             }
             
             // PnL
@@ -103,7 +106,7 @@ struct PortfolioSummaryCard: View {
                 VStack(spacing: 4) {
                     Text("Unrealized P&L")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                     
                     Text(viewModel.totalUnrealizedPnL.asCurrencyWithSign)
                         .font(.headline)
@@ -112,28 +115,30 @@ struct PortfolioSummaryCard: View {
                 
                 Divider()
                     .frame(height: 30)
+                    .background(Color.borderSubtle)
                 
                 VStack(spacing: 4) {
                     Text("Margin Used")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                     
                     Text(viewModel.totalMarginUsed.asCurrency)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                 }
                 
                 Divider()
                     .frame(height: 30)
+                    .background(Color.borderSubtle)
                 
                 VStack(spacing: 4) {
                     Text("Positions")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                     
                     Text("\(viewModel.openPositions.count)")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                 }
             }
         }
@@ -151,6 +156,7 @@ struct PositionsTabSelector: View {
         HStack(spacing: 0) {
             ForEach(PositionsTab.allCases, id: \.self) { tab in
                 Button(action: {
+                    HapticManager.shared.selection()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         selectedTab = tab
                     }
@@ -158,11 +164,12 @@ struct PositionsTabSelector: View {
                     VStack(spacing: 8) {
                         HStack(spacing: 6) {
                             Image(systemName: tab.icon)
+                                .foregroundColor(selectedTab == tab ? .pearPrimary : .iconTertiary)
                             Text(tab.rawValue)
                         }
                         .font(.subheadline)
                         .fontWeight(selectedTab == tab ? .semibold : .regular)
-                        .foregroundColor(selectedTab == tab ? .pearPrimary : .secondary)
+                        .foregroundColor(selectedTab == tab ? .pearPrimary : .textTertiary)
                         
                         Rectangle()
                             .fill(selectedTab == tab ? Color.pearPrimary : Color.clear)
@@ -178,6 +185,7 @@ struct PositionsTabSelector: View {
 // MARK: - Open Positions Content
 struct OpenPositionsContent: View {
     @ObservedObject var viewModel: PositionsViewModel
+    @Environment(\.tabSelection) var tabSelection
     
     var body: some View {
         Group {
@@ -190,7 +198,8 @@ struct OpenPositionsContent: View {
                     message: "You don't have any open positions yet",
                     actionTitle: "Create Basket"
                 ) {
-                    // Navigate to build tab
+                    HapticManager.shared.tap()
+                    tabSelection.wrappedValue = .build
                 }
             } else {
                 ScrollView {
@@ -198,6 +207,7 @@ struct OpenPositionsContent: View {
                         ForEach(viewModel.openPositions) { position in
                             PositionCard(position: position)
                                 .onTapGesture {
+                                    HapticManager.shared.cardTap()
                                     viewModel.selectPosition(position)
                                 }
                                 .contextMenu {
@@ -208,6 +218,7 @@ struct OpenPositionsContent: View {
                                     }
                                     
                                     Button(role: .destructive, action: {
+                                        HapticManager.shared.warning()
                                         viewModel.prepareClosePosition(position)
                                     }) {
                                         Label("Close Position", systemImage: "xmark.circle")
@@ -218,6 +229,7 @@ struct OpenPositionsContent: View {
                     .padding()
                 }
                 .refreshable {
+                    HapticManager.shared.pullToRefresh()
                     await viewModel.refresh()
                 }
             }
@@ -236,11 +248,11 @@ struct PositionCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(position.basketName)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                     
                     Text("\(position.legs.count) leg\(position.legs.count == 1 ? "" : "s") · \(position.timeOpen)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                 }
                 
                 Spacer()
@@ -253,11 +265,12 @@ struct PositionCard: View {
                     
                     Text(position.formattedPnLPercent)
                         .font(.caption)
-                        .foregroundColor(Color.pnlColor(for: position.totalPnL))
+                        .foregroundColor(Color.pnlColor(for: position.totalPnL).opacity(0.8))
                 }
             }
             
             Divider()
+                .background(Color.borderSubtle)
             
             // Legs preview
             HStack(spacing: 8) {
@@ -269,14 +282,14 @@ struct PositionCard: View {
                         
                         Text(leg.assetTicker)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.textSecondary)
                     }
                 }
                 
                 if position.legs.count > 3 {
                     Text("+\(position.legs.count - 3)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textQuaternary)
                 }
                 
                 Spacer()
@@ -284,7 +297,7 @@ struct PositionCard: View {
                 // Entry value
                 Text(position.formattedEntryValue)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textTertiary)
             }
         }
         .padding()
@@ -329,11 +342,11 @@ struct TradeHistoryCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(trade.basketName)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.textPrimary)
                     
                     Text(trade.formattedDuration)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.textTertiary)
                 }
                 
                 Spacer()
@@ -345,28 +358,24 @@ struct TradeHistoryCard: View {
                     
                     Text(trade.realizedPnLPercent.asPercentageWithSign)
                         .font(.caption)
-                        .foregroundColor(trade.isProfitable ? .pearProfit : .pearLoss)
+                        .foregroundColor((trade.isProfitable ? Color.pearProfit : Color.pearLoss).opacity(0.8))
                 }
             }
             
             HStack {
                 Text("Entry: \(trade.entryValue.asCurrency)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textQuaternary)
                 
                 Spacer()
                 
                 Text("Exit: \(trade.exitValue.asCurrency)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.textQuaternary)
             }
         }
         .padding()
         .background(Color.backgroundSecondary)
         .cornerRadius(12)
     }
-}
-
-#Preview {
-    PositionsListView()
 }
